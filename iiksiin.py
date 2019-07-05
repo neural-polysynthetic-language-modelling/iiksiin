@@ -1,6 +1,8 @@
 import grapheme
 import torch
 import sys
+import gzip
+import codecs
 from typing import Dict, List, Callable, Set, Mapping, Iterable
 
 """Implements Tensor Product Representation for potentially multi-morphemic words.
@@ -235,7 +237,7 @@ def main(max_characters: int,
 
     with (sys.stdin if input_file == "-" else open(input_file)) as input_source:
 
-        with open(output_file, "wb") as output:
+        with gzip.open(output_file, "wb") as output:
 
             alphabet: Alphabet = Alphabet("alphabet", set(grapheme.graphemes(end_of_morpheme_symbol +
                                                                              alphabet_symbols)))
@@ -247,8 +249,8 @@ def main(max_characters: int,
                                                                            morphemes_dimension=morphemes_dimension)
 
             result: Dict[str, torch.Tensor] = {}
-
             for line in input_source:
+                print('Processing line... %s' % (line), file=sys.stderr)
                 for word in line.split():
                     if word not in result:
                         morphemes = word.split(morpheme_delimiter)
@@ -271,13 +273,13 @@ if __name__ == "__main__":
                         metavar='N', type=int, nargs='?', default=20,
                         help='maximum number of morphemes allowed per word')
     parser.add_argument('-a', '--alphabet',
-                        metavar='ABC', type=str, nargs='?',
-                        default=string.ascii_letters +
-                                string.digits +
-                                string.punctuation +
-                                "\\u2018\\u2019\\u201C\\u201D" +  # single and double quotation marks
-                                " ",
-                        help="alphabet of characters (Unicode escapes of the form \\u2017 are allowed")
+                        metavar='filename', type=str, nargs='?',
+#                        default=string.ascii_letters +
+#                                string.digits +
+#                                string.punctuation +
+#                                "\\u2018\\u2019\\u201C\\u201D" +  # single and double quotation marks
+#                                " ",
+                        help="File containing alphabet of characters (Unicode escapes of the form \\u2017 are allowed")
     parser.add_argument('-e', '--end_of_morpheme_symbol',
                         metavar='character', type=str, nargs='?',
                         default="\\u0000",
@@ -301,8 +303,8 @@ if __name__ == "__main__":
 
     main(max_characters=args.max_characters,
          max_morphemes=args.max_morphemes,
-         alphabet_symbols=args.alphabet.decode('unicode_escape'),
-         end_of_morpheme_symbol=args.end_of_morpheme_symbol.decode('unicode_escape'),
-         morpheme_delimiter=args.morpheme_delimiter.decode('unicode_escape'),
+         alphabet_symbols=str.encode(open(args.alphabet).read()).decode('unicode_escape').replace('\n',''),
+         end_of_morpheme_symbol=str.encode(args.end_of_morpheme_symbol).decode('unicode_escape'),
+         morpheme_delimiter=str.encode(args.morpheme_delimiter).decode('unicode_escape'),
          input_file=args.input_file,
          output_file=args.output_file)
