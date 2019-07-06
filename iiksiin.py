@@ -1,9 +1,9 @@
 import grapheme
+import gzip
 import torch
 import sys
-import gzip
-import codecs
 from typing import Dict, List, Callable, Set, Mapping, Iterable
+import unicodedata
 
 """Implements Tensor Product Representation for potentially multi-morphemic words.
 
@@ -221,13 +221,32 @@ class TensorProductRepresentation:
         return result
 
 
+def char_to_code_point(c: str) -> str:
+    x_hex_string: str = hex(ord(c))     # a string of the form "0x95" or "0x2025"
+    hex_string: str = x_hex_string[2:]  # a string of the form "95" or "2025"
+    required_zero_padding = max(0, 4 - len(hex_string))
+    return f"U+{required_zero_padding * '0'}{hex_string}"  # a string of the form "\\u0095" or "\\u2025"
+
+
+def char_to_name(c: str) -> str:
+    try:
+        return unicodedata.name(c)
+    except ValueError:
+        return ""
+
+
+def unicode_info(s: str) -> str:
+    return s + "\t" + "; ".join([f"{char_to_code_point(c)} {char_to_name(c)}" for c in s])
+
+
 def main(max_characters: int,
          max_morphemes: int,
-         alphabet_symbols: str,
+         alphabet_file: str,
          end_of_morpheme_symbol: str,
          morpheme_delimiter: str,
          input_file: str,
-         output_file: str) -> None:
+         output_file: str,
+         verbose: int) -> None:
 
     import pickle
 
@@ -235,12 +254,51 @@ def main(max_characters: int,
         raise RuntimeError("The end of morpheme symbol must consist of a single grapheme cluster " +
                            "(see Unicode Standard Annex #29).")
 
+    alphabet_set: Set[str] = set()
+    if alphabet_file:  # If user provided a file containing alphabet symbols, attempt to use it
+        try:
+            with open(alphabet_file, 'r') as alphabet_source:
+                for line in alphabet_source:
+                    for character in grapheme.graphemes(line.strip()):
+                        alphabet_set.add(character)
+
+        except OSError as err:
+            print(f"ERROR - failed to read alphabet file {alphabet_file}:\t{err}", file=sys.stderr)
+            sys.exit(-1)
+
+    if len(alphabet_set) == 0 or not alphabet_file:  # Attempt to read alphabet symbols from input file
+        if input_file == "-":
+            print("ERROR - When reading from standard input, an alphabet file must be provided.", file=sys.stderr)
+            sys.exit(-2)
+        else:
+            print(f"Reading alphabet from input file {input_file}...", file=sys.stderr)
+
+            with open(input_file) as input_source:
+                for line in input_source:
+                    for character in grapheme.graphemes(line.strip()):
+                        alphabet_set.add(character)
+
+    alphabet_set.add(end_of_morpheme_symbol)
+
+    for symbol in sorted(alphabet_set):
+        for character in symbol:
+            category = unicodedata.category(character)
+            if category[0] == 'Z' and character != ' ':
+                print(f"WARNING - alphabet contains whitespace character:\t{unicode_info(symbol)}", file=sys.stderr)
+            elif category[0] == 'C' and character != morpheme_delimiter and character != end_of_morpheme_symbol:
+                print(f"WARNING - alphabet contains control character:\t{unicode_info(symbol)}", file=sys.stderr)
+
+    print(f"Symbols in alphabet: {len(alphabet_set)}", file=sys.stderr)
+    if verbose > 0:
+        print("-----------------------", file=sys.stderr)
+        for symbol in sorted(alphabet_set):
+            print(unicode_info(symbol), file=sys.stderr)
+
     with (sys.stdin if input_file == "-" else open(input_file)) as input_source:
 
         with gzip.open(output_file, "wb") as output:
 
-            alphabet: Alphabet = Alphabet("alphabet", set(grapheme.graphemes(end_of_morpheme_symbol +
-                                                                             alphabet_symbols)))
+            alphabet: Alphabet = Alphabet("alphabet", alphabet_set)
             characters_dimension: Dimension = Dimension("characters", max_characters)
             morphemes_dimension: Dimension = Dimension("morphemes", max_morphemes)
 
@@ -249,10 +307,13 @@ def main(max_characters: int,
                                                                            morphemes_dimension=morphemes_dimension)
 
             result: Dict[str, torch.Tensor] = {}
-            for line in input_source:
-                print('Processing line... %s' % (line), file=sys.stderr)
-                for word in line.split():
+            for number, line in enumerate(input_source):
+                print(f"Processing line {number}\t{line.strip()}", file=sys.stderr)
+                for word in line.strip().split():
                     if word not in result:
+                        for character in grapheme.graphemes(word):
+                            if character not in alphabet_set:
+                                print(f"WARNING - not in alphabet:\t{unicode_info(character)}", file=sys.stderr)
                         morphemes = word.split(morpheme_delimiter)
                         tensor: Tensor = tpr.process_morphemes(morphemes)
                         result[word] = tensor.data
@@ -263,7 +324,6 @@ def main(max_characters: int,
 if __name__ == "__main__":
 
     import argparse
-    import string
 
     parser = argparse.ArgumentParser(description='Construct tensor product representations of each morpheme.')
     parser.add_argument('-c', '--max_characters',
@@ -274,11 +334,6 @@ if __name__ == "__main__":
                         help='maximum number of morphemes allowed per word')
     parser.add_argument('-a', '--alphabet',
                         metavar='filename', type=str, nargs='?',
-#                        default=string.ascii_letters +
-#                                string.digits +
-#                                string.punctuation +
-#                                "\\u2018\\u2019\\u201C\\u201D" +  # single and double quotation marks
-#                                " ",
                         help="File containing alphabet of characters (Unicode escapes of the form \\u2017 are allowed")
     parser.add_argument('-e', '--end_of_morpheme_symbol',
                         metavar='character', type=str, nargs='?',
@@ -298,13 +353,15 @@ if __name__ == "__main__":
                         metavar='filename', type=str, nargs='?',
                         required=True,
                         help='Output file where morpheme tensors are recorded')
+    parser.add_argument('-v', '--verbose', metavar='int', type=int, default=0)
 
     args = parser.parse_args()
 
     main(max_characters=args.max_characters,
          max_morphemes=args.max_morphemes,
-         alphabet_symbols=str.encode(open(args.alphabet).read()).decode('unicode_escape').replace('\n',''),
+         alphabet_file=(args.alphabet if args.alphabet else ""),
          end_of_morpheme_symbol=str.encode(args.end_of_morpheme_symbol).decode('unicode_escape'),
          morpheme_delimiter=str.encode(args.morpheme_delimiter).decode('unicode_escape'),
          input_file=args.input_file,
-         output_file=args.output_file)
+         output_file=args.output_file,
+         verbose=args.verbose)
