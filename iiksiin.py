@@ -151,6 +151,24 @@ class Alphabet:
     def __repr__(self):
         return f"Alphabet({str(self.dimension)})"
 
+    @staticmethod
+    def char_to_code_point(c: str) -> str:
+        x_hex_string: str = hex(ord(c))     # a string of the form "0x95" or "0x2025"
+        hex_string: str = x_hex_string[2:]  # a string of the form "95" or "2025"
+        required_zero_padding = max(0, 4 - len(hex_string))
+        return f"U+{required_zero_padding * '0'}{hex_string}"  # a string of the form "\\u0095" or "\\u2025"
+
+    @staticmethod
+    def char_to_name(c: str) -> str:
+        try:
+            return unicodedata.name(c)
+        except ValueError:
+            return ""
+
+    @staticmethod
+    def unicode_info(s: str) -> str:
+        return s + "\t" + "; ".join([f"{Alphabet.char_to_code_point(c)} {Alphabet.char_to_name(c)}" for c in s])
+
 
 class Roles:
 
@@ -221,24 +239,6 @@ class TensorProductRepresentation:
         return result
 
 
-def char_to_code_point(c: str) -> str:
-    x_hex_string: str = hex(ord(c))     # a string of the form "0x95" or "0x2025"
-    hex_string: str = x_hex_string[2:]  # a string of the form "95" or "2025"
-    required_zero_padding = max(0, 4 - len(hex_string))
-    return f"U+{required_zero_padding * '0'}{hex_string}"  # a string of the form "\\u0095" or "\\u2025"
-
-
-def char_to_name(c: str) -> str:
-    try:
-        return unicodedata.name(c)
-    except ValueError:
-        return ""
-
-
-def unicode_info(s: str) -> str:
-    return s + "\t" + "; ".join([f"{char_to_code_point(c)} {char_to_name(c)}" for c in s])
-
-
 def main(max_characters: int,
          max_morphemes: int,
          alphabet_file: str,
@@ -284,15 +284,17 @@ def main(max_characters: int,
         for character in symbol:
             category = unicodedata.category(character)
             if category[0] == 'Z' and character != ' ':
-                print(f"WARNING - alphabet contains whitespace character:\t{unicode_info(symbol)}", file=sys.stderr)
+                print(f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}",
+                      file=sys.stderr)
             elif category[0] == 'C' and character != morpheme_delimiter and character != end_of_morpheme_symbol:
-                print(f"WARNING - alphabet contains control character:\t{unicode_info(symbol)}", file=sys.stderr)
+                print(f"WARNING - alphabet contains control character:\t{Alphabet.unicode_info(symbol)}",
+                      file=sys.stderr)
 
     print(f"Symbols in alphabet: {len(alphabet_set)}", file=sys.stderr)
     if verbose > 0:
         print("-----------------------", file=sys.stderr)
         for symbol in sorted(alphabet_set):
-            print(unicode_info(symbol), file=sys.stderr)
+            print(Alphabet.unicode_info(symbol), file=sys.stderr)
 
     with (sys.stdin if input_file == "-" else open(input_file)) as input_source:
 
@@ -313,7 +315,8 @@ def main(max_characters: int,
                     if word not in result:
                         for character in grapheme.graphemes(word):
                             if character not in alphabet_set:
-                                print(f"WARNING - not in alphabet:\t{unicode_info(character)}", file=sys.stderr)
+                                print(f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}",
+                                      file=sys.stderr)
                         morphemes = word.split(morpheme_delimiter)
                         tensor: Tensor = tpr.process_morphemes(morphemes)
                         result[word] = tensor.data
