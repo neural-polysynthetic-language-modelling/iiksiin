@@ -325,37 +325,40 @@ if __name__ == "__main__":
 
     import argparse
 
-    parser = argparse.ArgumentParser(description='Construct tensor product representations of each morpheme.')
-    parser.add_argument('-c', '--max_characters',
-                        metavar='N', type=int, nargs='?', default=100,
-                        help='maximum number of characters allowed per morpheme')
-    parser.add_argument('-m', '--max_morphemes',
-                        metavar='N', type=int, nargs='?', default=20,
-                        help='maximum number of morphemes allowed per word')
-    parser.add_argument('-a', '--alphabet',
-                        metavar='filename', type=str, nargs='?',
-                        help="File containing alphabet of characters (Unicode escapes of the form \\u2017 are allowed")
-    parser.add_argument('-e', '--end_of_morpheme_symbol',
-                        metavar='character', type=str, nargs='?',
-                        default="\\u0000",
-                        help='Character that should appear as the final symbol in every morpheme' +
-                             'This symbol must not appear in the alphabet')
-    parser.add_argument('-d', '--morpheme_delimiter',
-                        metavar='string', type=str, nargs='?',
-                        default="\\u001F",
-                        help='Character that should appear between adjacent morphemes. ' +
-                             'This symbol must not appear in the alphabet')
-    parser.add_argument('-i', '--input_file',
-                        metavar='filename', type=str, nargs='?',
-                        default="-",
-                        help='Input file containing whitespace delimited words (- for standard input)')
-    parser.add_argument('-o', '--output_file',
-                        metavar='filename', type=str, nargs='?',
-                        required=True,
-                        help='Output file where morpheme tensors are recorded')
-    parser.add_argument('-v', '--verbose', metavar='int', type=int, default=0)
+    arg_parser = argparse.ArgumentParser(description='Construct tensor product representations of each morpheme.')
+    arg_parser.add_argument('-c', '--max_characters',
+                            metavar='N', type=int, nargs='?', default=20,
+                            help='Maximum number of characters allowed per morpheme.')
+    arg_parser.add_argument('-m', '--max_morphemes',
+                            metavar='N', type=int, nargs='?', default=10,
+                            help='Maximum number of morphemes allowed per word.')
+    arg_parser.add_argument('-a', '--alphabet',
+                            metavar='filename', type=str, nargs='?',
+                            help="File containing alphabet of characters " +
+                                 "(Unicode escapes of the form \\u2017 are allowed.")
+    arg_parser.add_argument('-e', '--end_of_morpheme_symbol',
+                            metavar='character', type=str, nargs='?',
+                            default="\\u0000",
+                            help='In this output tensor representation, ' +
+                                 'this character will be appended as the final symbol in every morpheme. ' +
+                                 'This symbol must not appear in the alphabet')
+    arg_parser.add_argument('-d', '--morpheme_delimiter',
+                            metavar='string', type=str, nargs='?',
+                            default="\\u001F",
+                            help='In the user-provided input file, ' +
+                                 'this character must appear between adjacent morphemes. ' +
+                                 'This symbol must not appear in the alphabet')
+    arg_parser.add_argument('-i', '--input_file',
+                            metavar='filename', type=str, nargs='?',
+                            default="-",
+                            help='Input file containing whitespace delimited words (- for standard input)')
+    arg_parser.add_argument('-o', '--output_file',
+                            metavar='filename', type=str, nargs='?',
+                            required=True,
+                            help='Output file where morpheme tensors are recorded')
+    arg_parser.add_argument('-v', '--verbose', metavar='int', type=int, default=0)
 
-    args = parser.parse_args()
+    args = arg_parser.parse_args()
 
     main(max_characters=args.max_characters,
          max_morphemes=args.max_morphemes,
