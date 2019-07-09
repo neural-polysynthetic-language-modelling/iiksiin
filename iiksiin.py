@@ -208,11 +208,11 @@ class Roles:
         self.dimension: Dimension = dimension
 
     def __getitem__(self, index) -> Vector:
-        try:
-            return self._one_hot_role_vectors[index]
-        except IndexError:
-            raise IndexError(f"Attempted to access a Role vector at out-of-bounds index {index}. " +
-                             f"Re-run the script with a higher maximum value for the relevant parameter.")
+        # try:
+        return self._one_hot_role_vectors[index]
+        # except IndexError:
+        #    raise IndexError(f"Attempted to access a Role vector at out-of-bounds index {index}. " +
+        #                     f"Re-run the script with a higher maximum value for the relevant parameter.")
 
     def __iter__(self) -> Iterable[Vector]:
         return iter(self._one_hot_role_vectors)
@@ -392,12 +392,16 @@ def main(
                                     f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}",
                                     file=sys.stderr,
                                 )
-                        morphemes = word.split(morpheme_delimiter)
-                        tensor: Tensor = tpr.process_morphemes(morphemes)
-                        result[word] = tensor.data
+                        try:
+                            morphemes = word.split(morpheme_delimiter)
+                            tensor: Tensor = tpr.process_morphemes(morphemes)
+                            result[word] = tensor.data
+                        except IndexError:
+                            print(f"WARNING - unable to process {word}", file=sys.stderr)
 
+            print(f"Writing binary file to disk at {output}...", file=sys.stderr)
             pickle.dump((result, alphabet._symbols), output)
-
+            print(f"...done writing binary file to disk at {output}", file=sys.stderr)
 
 if __name__ == "__main__":
 
@@ -476,7 +480,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
 
     args = arg_parser.parse_args()
-
+    # print(args.morpheme_delimiter)
+    # sys.exit(-1)
     main(
         max_characters=args.max_characters,
         max_morphemes=args.max_morphemes,
