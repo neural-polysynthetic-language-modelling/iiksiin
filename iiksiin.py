@@ -143,12 +143,16 @@ class OneHotVector(Vector):
 class Alphabet:
 
     END_OF_MORPHEME = "\u0000"
+    END_OF_TRANSMISSION = "\u0004"
 
     def __init__(self, name: str, symbols: Set[str]):
+        alphabet_symbols = set(symbols)
+        alphabet_symbols.add(Alphabet.END_OF_MORPHEME)
+        alphabet_symbols.add(Alphabet.END_OF_TRANSMISSION)
         self._symbols: Mapping[str, int] = {
-            symbol: index for (index, symbol) in enumerate(symbols, start=1)
+            symbol: index for (index, symbol) in enumerate(sorted(alphabet_symbols), start=1)
         }
-        self.dimension: Dimension = Dimension(name, 1 + len(symbols))
+        self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
         self.name = name
         self.oov = 0
 
@@ -204,7 +208,11 @@ class Roles:
         self.dimension: Dimension = dimension
 
     def __getitem__(self, index) -> Vector:
+        # try:
         return self._one_hot_role_vectors[index]
+        # except IndexError:
+        #    raise IndexError(f"Attempted to access a Role vector at out-of-bounds index {index}. " +
+        #                     f"Re-run the script with a higher maximum value for the relevant parameter.")
 
     def __iter__(self) -> Iterable[Vector]:
         return iter(self._one_hot_role_vectors)
@@ -227,6 +235,13 @@ class TensorProductRepresentation:
         )
         self.morpheme_roles: Roles = Roles(
             morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
+        )
+
+    def process_morpheme(self, morpheme: Iterable[str]):
+        return TensorProductRepresentation.process_characters_in_morpheme(
+            characters=list(morpheme) + [Alphabet.END_OF_MORPHEME],
+            alphabet=self.alphabet,
+            character_roles=self.character_roles
         )
 
     def process_morphemes(self, morphemes: Iterable[Iterable[str]]):
@@ -384,11 +399,20 @@ def main(
                                     f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}",
                                     file=sys.stderr,
                                 )
-                        morphemes = word.split(morpheme_delimiter)
-                        tensor: Tensor = tpr.process_morphemes(morphemes)
-                        result[word] = tensor.data
 
-            pickle.dump(result, output)
+                        morphemes = word.split(morpheme_delimiter)
+                        for morpheme in morphemes:
+                            try:
+                                tensor: Tensor = tpr.process_morpheme(morpheme)
+                                result[morpheme] = tensor.data
+#                            print(f"ord {word} has a tensor of shape {tensor.shape}", file=sys.stderr)
+#                                result[word] = tensor.data
+                            except IndexError:
+                                print(f"WARNING - unable to process morpheme {morpheme} of {word}", file=sys.stderr)
+
+            print(f"Writing binary file to disk at {output}...", file=sys.stderr)
+            pickle.dump((result, alphabet._symbols), output)
+            print(f"...done writing binary file to disk at {output}", file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -468,7 +492,8 @@ if __name__ == "__main__":
     arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
 
     args = arg_parser.parse_args()
-
+    # print(args.morpheme_delimiter)
+    # sys.exit(-1)
     main(
         max_characters=args.max_characters,
         max_morphemes=args.max_morphemes,
