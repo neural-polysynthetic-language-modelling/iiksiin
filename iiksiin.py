@@ -388,7 +388,7 @@ def main(
                         tensor: Tensor = tpr.process_morphemes(morphemes)
                         result[word] = tensor.data
 
-            pickle.dump(result, output)
+            pickle.dump((result, alphabet._symbols), output)
 
 
 if __name__ == "__main__":
