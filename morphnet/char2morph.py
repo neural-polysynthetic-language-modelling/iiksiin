@@ -149,7 +149,7 @@ def main():
     assert torch.cuda.is_available()
 
     print("[!] preparing dataset...")
-    train_iter, dev_iter, test_iter, alphabet, morph_size = load_dataset(
+    train_iter, dev_iter, test_iter, alphabet, morph_size = load_data(
         args.batch_size, args.corpus_dir, args.tensor_file
     )
     print(
