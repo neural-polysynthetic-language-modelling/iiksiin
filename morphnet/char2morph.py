@@ -188,3 +188,7 @@ def main():
             best_dev_loss = dev_loss
     test_loss = evaluate(seq2seq, test_iter, en_size, DE, EN)
     print("[TEST] loss:%5.2f" % test_loss)
+
+
+if __name__ == "__main__":
+    main()
