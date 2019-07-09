@@ -237,6 +237,13 @@ class TensorProductRepresentation:
             morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
         )
 
+    def process_morpheme(self, morpheme: Iterable[str]):
+        return TensorProductRepresentation.process_characters_in_morpheme(
+            characters=list(morpheme) + [Alphabet.END_OF_MORPHEME],
+            alphabet=self.alphabet,
+            character_roles=self.character_roles
+        )
+
     def process_morphemes(self, morphemes: Iterable[Iterable[str]]):
         return TensorProductRepresentation.process_morphemes_in_word(
             morphemes=morphemes,
@@ -392,16 +399,21 @@ def main(
                                     f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}",
                                     file=sys.stderr,
                                 )
-                        try:
-                            morphemes = word.split(morpheme_delimiter)
-                            tensor: Tensor = tpr.process_morphemes(morphemes)
-                            result[word] = tensor.data
-                        except IndexError:
-                            print(f"WARNING - unable to process {word}", file=sys.stderr)
+
+                        morphemes = word.split(morpheme_delimiter)
+                        for morpheme in morphemes:
+                            try:
+                                tensor: Tensor = tpr.process_morpheme(morpheme)
+                                result[morpheme] = tensor.data
+#                            print(f"ord {word} has a tensor of shape {tensor.shape}", file=sys.stderr)
+#                                result[word] = tensor.data
+                            except IndexError:
+                                print(f"WARNING - unable to process morpheme {morpheme} of {word}", file=sys.stderr)
 
             print(f"Writing binary file to disk at {output}...", file=sys.stderr)
             pickle.dump((result, alphabet._symbols), output)
             print(f"...done writing binary file to disk at {output}", file=sys.stderr)
+
 
 if __name__ == "__main__":
 
