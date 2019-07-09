@@ -143,12 +143,16 @@ class OneHotVector(Vector):
 class Alphabet:
 
     END_OF_MORPHEME = "\u0000"
+    END_OF_TRANSMISSION = "\u0004"
 
     def __init__(self, name: str, symbols: Set[str]):
+        alphabet_symbols = set(symbols)
+        alphabet_symbols.add(Alphabet.END_OF_MORPHEME)
+        alphabet_symbols.add(Alphabet.END_OF_TRANSMISSION)
         self._symbols: Mapping[str, int] = {
-            symbol: index for (index, symbol) in enumerate(symbols, start=1)
+            symbol: index for (index, symbol) in enumerate(sorted(alphabet_symbols), start=1)
         }
-        self.dimension: Dimension = Dimension(name, 1 + len(symbols))
+        self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
         self.name = name
         self.oov = 0
 
@@ -204,7 +208,11 @@ class Roles:
         self.dimension: Dimension = dimension
 
     def __getitem__(self, index) -> Vector:
-        return self._one_hot_role_vectors[index]
+        try:
+            return self._one_hot_role_vectors[index]
+        except IndexError:
+            raise IndexError(f"Attempted to access a Role vector at out-of-bounds index {index}. " +
+                             f"Re-run the script with a higher maximum value for the relevant parameter.")
 
     def __iter__(self) -> Iterable[Vector]:
         return iter(self._one_hot_role_vectors)
