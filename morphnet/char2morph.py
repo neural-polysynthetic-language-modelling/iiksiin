@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pack_sequence, pad_sequence
 from model import Encoder, Decoder, Seq2Seq
-
+import sys
 import pickle
 import gzip
 
@@ -115,16 +115,53 @@ def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet):
     pad = alphabet["\u0004"]
     total_loss = 0
 
+#    src_tensor = None
+#    tgt_tensor = None
+    
     for b, batch in enumerate(train_iter):
         src = batch['chars']
         trg = batch['morphs']
-        src = Variable(src.data.cuda(), volatile=True)
-        trg = Variable(trg.data.cuda(), volatile=True)
-        output = model(src, trg, teacher_forcing_ratio=0.0)
+
+        print(f"Starting batch {b} with src ({src.shape}) and tgt ({trg.shape})...", end="", file=sys.stderr)
+
+#        del src_tensor
+#        del tgt_tensor
+
+#        src_tensor = torch.tensor(src.data).cuda()
+#        tgt_tensor = torch.tensor(trg.data).cuda()
+        
+#        src_tensor=src if src_tensor is None else src_tensor.
+#        if src_tensor is None:
+#            src_tensor = src.cuda()
+#            src_tensor.cuda()
+#        else:
+#            print(f"Before, src_tensor.is_cuda == {src_tensor.is_cuda}", file=sys.stderr)
+#            src_tensor.data = src.data.cuda()
+#            print(f"After, src_tensor.is_cuda == {src_tensor.is_cuda}", file=sys.stderr)           # 
+#            
+#        if tgt_tensor is None:
+#            tgt_tensor = trg.cuda()
+#            tgt_tensor.cuda()
+#        else:
+#            tgt_tensor.data = trg.data.cuda()
+        
+        
+        
+        # TODO: Remove volatile=True and replace with with torch.no_grad():
+        src_tensor = Variable(src.data.cuda(), volatile=True)
+        tgt_tensor = Variable(trg.data.cuda(), volatile=True)
+        del src
+        del trg
+        
+        output = model(src_tensor, tgt_tensor, teacher_forcing_ratio=0.0)
 
         # fix
-        loss = F.mse_loss(output.view(-1), trg.contiguous().view(-1))
-        total_loss += loss.data[0]
+        loss = F.mse_loss(output.view(-1), tgt_tensor.contiguous().view(-1))
+        total_loss += loss.data[0] # TODO: UserWarning: invalid index of a 0-dim tensor. This will be an error in PyTorch 0.5. Use tensor.item() to convert a 0-dim tensor to a Python number
+        del output
+        del loss
+        print(f"batch {b} complete.", file=sys.stderr)
+        sys.stderr.flush()
     return total_loss / len(val_iter)
 
 
@@ -146,39 +183,59 @@ def evaluate(e, model, optimizer, val_iter, tensor_size, alphabet):
         optimizer.step()
         total_loss += loss.data[0]
 
+        del src
+        del trg
+        del loss
+        del output
+        
         if b % 100 == 0 and b != 0:
             total_loss = total_loss / 100
             print("[%d][loss:%5.2f][pp:%5.2f]" % (b, total_loss, math.exp(total_loss)))
             total_loss = 0
 
+def debug():
+    import sys
+    flush()
+    sys.exit(-1)
+    
+def flush():
+    sys.stderr.flush
+    sys.stdout.flush()
+
 
 def main():
+
+    import sys
+    
     args = parse_arguments()
     hidden_size = 512
     embed_size = 256
     assert torch.cuda.is_available()
 
-    print("[!] preparing dataset...")
+    print("[!] preparing dataset...", file=sys.stderr)
     train_iter, dev_iter, test_iter, alphabet, morph_size = load_data(
         args.batch_size, args.corpus_dir, args.tensor_file
     )
-    print(
-        "[TRAIN]:%d (dataset:%d)\t[TEST]:%d (dataset:%d)"
-        % (
-            len(train_iter),
-            len(train_iter.dataset),
-            len(test_iter),
-            len(test_iter.dataset),
-        )
-    )
+    print(f"[TRAIN]:{len(train_iter)} (dataset:{len(train_iter.dataset)})\t" +
+          f"[TEST]:{len(test_iter)} (dataset:{len(test_iter.dataset)})", file=sys.stderr)
+
+#    print(
+#        "[TRAIN]:%d (dataset:%d)\t[TEST]:%d (dataset:%d)"
+#        % (
+##            len(train_iter),
+#            len(train_iter.dataset),
+#            len(test_iter),
+#            len(test_iter.dataset),
+#        )
+#    )
     # print("[DE_vocab]:%d [en_vocab]:%d" % (de_size, en_size))
 
-    print("[!] Instantiating models...")
+    print("[!] Instantiating models...", file=sys.stderr)
     encoder = Encoder(len(alphabet), embed_size, hidden_size, n_layers=2, dropout=0.5)
     decoder = Decoder(morph_size*args.max_num_morphs, hidden_size, morph_size*args.max_num_morphs, n_layers=1, dropout=0.5)
     seq2seq = Seq2Seq(encoder, decoder).cuda()
     optimizer = optim.Adam(seq2seq.parameters(), lr=args.lr)
-    print(seq2seq)
+    print(seq2seq, file=sys.stderr)
 
     best_dev_loss = None
     for e in range(1, args.epochs + 1):
@@ -186,18 +243,20 @@ def main():
         dev_loss = evaluate(seq2seq, test_iter, morph_size, alphabet)
         print(
             "[Epoch:%d] dev_loss:%5.3f | dev_pp:%5.2fS"
-            % (e, dev_loss, math.exp(dev_loss))
+            % (e, dev_loss, math.exp(dev_loss)),
+            file=sys.stderr
         )
-
+        flush()
         # Save the model if the devidation loss is the best we've seen so far.
         if not best_dev_loss or dev_loss < best_dev_loss:
-            print("[!] saving model...")
+            print("[!] saving model...", file=sys.stderr)
             if not os.path.isdir(".save"):
                 os.makedirs(".save")
             torch.save(seq2seq.state_dict(), "./.save/char2morph_%d.pt" % (e))
             best_dev_loss = dev_loss
     test_loss = evaluate(seq2seq, test_iter, morph_size, alphabet)
-    print("[TEST] loss:%5.2f" % test_loss)
+    print("[TEST] loss:%5.2f" % test_loss, file=sys.stderr)
+    flush()
 
 
 if __name__ == "__main__":

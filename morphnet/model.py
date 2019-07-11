@@ -4,7 +4,7 @@ import random
 from torch import nn
 from torch.autograd import Variable
 import torch.nn.functional as F
-
+import sys
 
 class Encoder(nn.Module):
     def __init__(self, input_size, embed_size, hidden_size, n_layers=1, dropout=0.5):
@@ -18,6 +18,8 @@ class Encoder(nn.Module):
         )
 
     def forward(self, src, hidden=None):
+        print(f"In src.is_cuda is {src.is_cuda}", file=sys.stderr)
+        sys.stderr.flush()
         embedded = self.embed(src)
         outputs, hidden = self.gru(embedded, hidden)
         # sum bidirectional outputs
