@@ -135,13 +135,13 @@ class Autoencoder(torch.nn.Module):
 
                 loss.backward()
 
-            print(f"{datetime.now()}\tEpoch {str(epoch).zfill(len(str(epochs)))}\ttrain loss: {loss.item()}",
+            print(f"{datetime.now()}\tEpoch {str(epoch).zfill(len(str(num_epochs)))}\ttrain loss: {loss.item()}",
                   file=sys.stderr)
 
             sys.stderr.flush()
 
             if epoch % 100 == 0:
-                torch.save(self, f"model_at_epoch_{str(epoch).zfill(len(str(epochs)))}.pt")
+                torch.save(self, f"model_at_epoch_{str(epoch).zfill(len(str(num_epochs)))}.pt")
 
             # Backward pass
             optimizer.step()
