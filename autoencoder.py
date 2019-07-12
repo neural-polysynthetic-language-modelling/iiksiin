@@ -2,7 +2,8 @@
 
 import torch
 import torch.nn
-from torch.nn.functional import relu, sigmoid
+from torch import sigmoid
+from torch.nn.functional import relu
 import sys
 
 """Implements an autoencoder to embed Tensor Product Representation tensors into smaller vectors.
@@ -23,6 +24,9 @@ __maintainer = "Lane Schwartz"
 __email__ = "dowobeha@gmail.com"
 __version__ = "0.0.1"
 __status__ = "Prototype"
+
+if sys.version_info < (3, 7):
+    raise RuntimeError(f"{__file__} requires Python 3.7 or later")
 
 
 class Tensors:
@@ -69,7 +73,7 @@ class Tensors:
 
 class Autoencoder(torch.nn.Module):
 
-    def __init__(self, input_dimension_size: int, hidden_layer_size: int, num_hidden_layers: int = 2):
+    def __init__(self, input_dimension_size: int, hidden_layer_size: int, num_hidden_layers: int):
         super().__init__()
         self.input_dimension_size: int = input_dimension_size
         self.hidden_layer_size: int = hidden_layer_size
@@ -147,25 +151,90 @@ class Autoencoder(torch.nn.Module):
             optimizer.step()
 
 
+def parse_arguments():
+    import argparse
+
+    arg_parser = argparse.ArgumentParser(
+        description="Autoencode tensor product representations of each morpheme."
+    )
+    arg_parser.add_argument(
+        "-e",
+        "--epochs",
+        metavar="N",
+        type=int,
+        nargs="?",
+        default=200,
+        help="Number of epochs to run during training.",
+    )
+    arg_parser.add_argument(
+        "-b",
+        "--batch",
+        metavar="N",
+        type=int,
+        nargs="?",
+        default=100,
+        help="Batch size",
+    )
+    arg_parser.add_argument(
+        "-t",
+        "--tensor_file",
+        metavar="filename",
+        type=str,
+        nargs="?",
+        help="Path to pickle file containing dictionary of morpheme tensors.",
+    )
+    arg_parser.add_argument(
+        "-h",
+        "--hidden_layer_size",
+        metavar="N",
+        type=str,
+        nargs="?",
+        default="50",
+        help="Size of each hidden layer",
+    )
+    arg_parser.add_argument(
+        "-n",
+        "--hidden_layers",
+        metavar="N",
+        type=str,
+        nargs="?",
+        default="2",
+        help="Number of hidden layers",
+    )
+    arg_parser.add_argument(
+        "-r",
+        "--learning_rate",
+        metavar="N",
+        type=str,
+        nargs="?",
+        default="0.01",
+        help="Learning rate",
+    )
+
+    arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
+
+    args = arg_parser.parse_args()
+
+    return args
+
+
 def main():
+
+    args = parse_arguments()
 
     print(f"Starting program...", file=sys.stderr)
     sys.stderr.flush()
 
-    num_epochs = 100000
-    max_items_per_batch=100
-
-    tensor_file = "tensors.pickle"
-
-    data = Tensors.load_from_pickle_file(tensor_file)
+    data = Tensors.load_from_pickle_file(args.tensor_file)
 
     model = Autoencoder(input_dimension_size=data.input_dimension_size,
-                        hidden_layer_size=50).cuda()
+                        hidden_layer_size=args.hidden_layer_size,
+                        num_hidden_layers=args.hidden_layers).cuda()
 
     criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-    model.run_training(data, criterion, optimizer, num_epochs, max_items_per_batch)
+    model.run_training(data, criterion, optimizer, args.epochs, args.batch)
 
 
 if __name__ == "__main__":
