@@ -151,74 +151,63 @@ class Autoencoder(torch.nn.Module):
             optimizer.step()
 
 
-def parse_arguments():
+def program_arguments():
     import argparse
 
     arg_parser = argparse.ArgumentParser(
         description="Autoencode tensor product representations of each morpheme."
     )
     arg_parser.add_argument(
-        "-e",
         "--epochs",
-        metavar="N",
         type=int,
-        nargs="?",
-        default=200,
+         default=200,
         help="Number of epochs to run during training.",
     )
     arg_parser.add_argument(
-        "-b",
-        "--batch",
-        metavar="N",
+        "--batch_size",
         type=int,
-        nargs="?",
         default=100,
         help="Batch size",
     )
     arg_parser.add_argument(
-        "-t",
         "--tensor_file",
-        metavar="filename",
         type=str,
-        nargs="?",
         help="Path to pickle file containing dictionary of morpheme tensors.",
     )
     arg_parser.add_argument(
         "--hidden_layer_size",
-        metavar="N",
-        type=str,
-        nargs="?",
+        type=int,
         default="50",
         help="Size of each hidden layer",
     )
     arg_parser.add_argument(
         "--hidden_layers",
-        metavar="N",
-        type=str,
-        nargs="?",
+        type=int,
         default="2",
         help="Number of hidden layers",
     )
     arg_parser.add_argument(
-        "-r",
         "--learning_rate",
-        metavar="N",
-        type=str,
-        nargs="?",
+        type=float,
         default="0.01",
         help="Learning rate",
     )
+    arg_parser.add_argument(
+        "-v",
+        "--verbose",
+        metavar="LEVEL",
+        type=int,
+        default=0,
+        help="Verbosity level"
+    )
 
-    arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
-
-    args = arg_parser.parse_args()
-
-    return args
+    return arg_parser
 
 
 def main():
 
-    args = parse_arguments()
+    arg_parser = program_arguments()
+    args = arg_parser.parse_args()
 
     if args.tensor_file:
 
@@ -234,8 +223,13 @@ def main():
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-        model.run_training(data, criterion, optimizer, args.epochs, args.batch)
+        model.run_training(data, criterion, optimizer, args.epochs, args.batch_size)
 
+    else:
 
+        arg_parser.print_usage(file=sys.stderr)
+        sys.exit(1)
+
+        
 if __name__ == "__main__":
     main()
