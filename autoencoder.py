@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn
+from torch.nn.functional import relu, sigmoid
 import sys
 
 """Implements an autoencoder to embed Tensor Product Representation tensors into smaller vectors.
@@ -72,28 +73,39 @@ class Autoencoder(torch.nn.Module):
         super().__init__()
         self.input_dimension_size: int = input_dimension_size
         self.hidden_layer_size: int = hidden_layer_size
-        self.create_hidden_layer1 = torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size)
-        self.create_hidden_layer2 = torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size)
-        self.apply_hidden_layer_activation_function = torch.nn.ReLU()
-        self.create_output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
-        self.apply_output_layer_sigmoid_function = torch.nn.Sigmoid()
+        self.hidden_layers = torch.nn.ModuleList()
+        for n in range(num_hidden_layers):
+            if n == 0:
+                self.hidden_layers.append(torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size))
+            else:
+                self.hidden_layers.append(torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size))
+        self.output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
+#        self.hidden_layers.extend([torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size)] * )
+#        self.create_hidden_layer1 = torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size)
+#        self.create_hidden_layer2 = torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size)
+#        self.apply_hidden_layer_activation_function = torch.nn.ReLU()
+#        self.create_output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
+#        self.apply_output_layer_sigmoid_function = torch.nn.Sigmoid()
         
     def forward(self, input_layer):
-        final_hidden_layer = self.calculate_hidden_layer(input_layer)
-        output_layer = self.calculate_output_layer(final_hidden_layer)
+        final_hidden_layer = self.apply_hidden_layers(input_layer)
+        output_layer = self.apply_output_layer(final_hidden_layer)
         return output_layer
 
-    def calculate_hidden_layer(self, input_layer):
-        unactivated_hidden_layer1 = self.create_hidden_layer1(input_layer)
-        hidden_layer1 = self.apply_hidden_layer_activation_function(unactivated_hidden_layer1)
-        unactivated_hidden_layer2 = self.create_hidden_layer2(hidden_layer1)
-        hidden_layer2 = self.apply_hidden_layer_activation_function(unactivated_hidden_layer2)
-        return hidden_layer2
+    def apply_hidden_layers(self, input_layer):
+        previous_layer = input_layer
 
-    def calculate_output_layer(self, hidden_layer):
-        unactivated_output_layer = self.create_output_layer(hidden_layer)
-        output_layer = self.apply_output_layer_sigmoid_function(unactivated_output_layer)
-        return output_layer
+        for hidden in self.hidden_layers:
+            current_layer = relu(hidden(previous_layer))
+            previous_layer = current_layer
+
+        return current_layer
+
+    def apply_output_layer(self, hidden_layer):
+        return sigmoid(self.output_layer(hidden_layer))
+#        unactivated_output_layer = self.create_output_layer(hidden_layer)
+#        output_layer = self.apply_output_layer_sigmoid_function(unactivated_output_layer)
+#        return output_layer
 
     def run_training(self, data: Tensors, criterion, optimizer, num_epochs: int, max_items_per_batch: int = 100):
         from datetime import datetime
