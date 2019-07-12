@@ -220,19 +220,21 @@ def main():
 
     args = parse_arguments()
 
-    print(f"Starting program...", file=sys.stderr)
-    sys.stderr.flush()
+    if args.tensor_file:
 
-    data = Tensors.load_from_pickle_file(args.tensor_file)
+        print(f"Starting program...", file=sys.stderr)
+        sys.stderr.flush()
 
-    model = Autoencoder(input_dimension_size=data.input_dimension_size,
-                        hidden_layer_size=args.hidden_layer_size,
-                        num_hidden_layers=args.hidden_layers).cuda()
+        data = Tensors.load_from_pickle_file(args.tensor_file)
 
-    criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
+        model = Autoencoder(input_dimension_size=data.input_dimension_size,
+                            hidden_layer_size=args.hidden_layer_size,
+                            num_hidden_layers=args.hidden_layers).cuda()
 
-    model.run_training(data, criterion, optimizer, args.epochs, args.batch)
+        criterion = torch.nn.MSELoss()
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
+
+        model.run_training(data, criterion, optimizer, args.epochs, args.batch)
 
 
 if __name__ == "__main__":
