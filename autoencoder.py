@@ -184,7 +184,6 @@ def parse_arguments():
         help="Path to pickle file containing dictionary of morpheme tensors.",
     )
     arg_parser.add_argument(
-        "-h",
         "--hidden_layer_size",
         metavar="N",
         type=str,
@@ -193,7 +192,6 @@ def parse_arguments():
         help="Size of each hidden layer",
     )
     arg_parser.add_argument(
-        "-n",
         "--hidden_layers",
         metavar="N",
         type=str,
