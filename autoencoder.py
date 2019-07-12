@@ -1,5 +1,6 @@
 #!/usr/bin/env python3.7
 
+import logging
 import torch
 import torch.nn
 from torch import sigmoid
@@ -111,7 +112,15 @@ class Autoencoder(torch.nn.Module):
 #        output_layer = self.apply_output_layer_sigmoid_function(unactivated_output_layer)
 #        return output_layer
 
-    def run_training(self, data: Tensors, criterion, optimizer, num_epochs: int, max_items_per_batch: int = 100):
+    def run_training(
+            self,
+            data: Tensors,
+            criterion,
+            optimizer,
+            num_epochs: int,
+            max_items_per_batch: int,
+            save_frequency: int
+    ):
         from datetime import datetime
 
         print(f"Loading data...", file=sys.stderr, end="")
@@ -144,7 +153,7 @@ class Autoencoder(torch.nn.Module):
 
             sys.stderr.flush()
 
-            if epoch % 100 == 0:
+            if epoch % save_frequency == 0:
                 torch.save(self, f"model_at_epoch_{str(epoch).zfill(len(str(num_epochs)))}.pt")
 
             # Backward pass
@@ -193,11 +202,18 @@ def program_arguments():
         help="Learning rate",
     )
     arg_parser.add_argument(
+        "--save_frequency",
+        metavar="N",
+        type=int,
+        default="100",
+        help="Save model after every N epochs",
+    )
+    arg_parser.add_argument(
         "-v",
         "--verbose",
         metavar="LEVEL",
-        type=int,
-        default=0,
+        type=str,
+        default="INFO",
         help="Verbosity level"
     )
 
@@ -211,7 +227,8 @@ def main():
 
     if args.tensor_file:
 
-        print(f"Starting program...", file=sys.stderr)
+        logging.info("Starting program...")
+
         sys.stderr.flush()
 
         data = Tensors.load_from_pickle_file(args.tensor_file)
@@ -223,7 +240,7 @@ def main():
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-        model.run_training(data, criterion, optimizer, args.epochs, args.batch_size)
+        model.run_training(data, criterion, optimizer, args.epochs, args.batch_size, args.save_frequency)
 
     else:
 
