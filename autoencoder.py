@@ -85,12 +85,6 @@ class Autoencoder(torch.nn.Module):
             else:
                 self.hidden_layers.append(torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size))
         self.output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
-#        self.hidden_layers.extend([torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size)] * )
-#        self.create_hidden_layer1 = torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size)
-#        self.create_hidden_layer2 = torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size)
-#        self.apply_hidden_layer_activation_function = torch.nn.ReLU()
-#        self.create_output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
-#        self.apply_output_layer_sigmoid_function = torch.nn.Sigmoid()
         
     def forward(self, input_layer):
         final_hidden_layer = self.apply_hidden_layers(input_layer)
@@ -108,9 +102,6 @@ class Autoencoder(torch.nn.Module):
 
     def apply_output_layer(self, hidden_layer):
         return sigmoid(self.output_layer(hidden_layer))
-#        unactivated_output_layer = self.create_output_layer(hidden_layer)
-#        output_layer = self.apply_output_layer_sigmoid_function(unactivated_output_layer)
-#        return output_layer
 
     def run_training(
             self,
@@ -119,18 +110,21 @@ class Autoencoder(torch.nn.Module):
             optimizer,
             num_epochs: int,
             max_items_per_batch: int,
-            save_frequency: int
+            save_frequency: int,
+            cuda_device: int
     ):
-        from datetime import datetime
-
-        print(f"Loading data...", file=sys.stderr, end="")
-        sys.stderr.flush()
+        logging.info("Loading data...")
         batches_of_morphemes, batches_of_tensors = data.get_batches(items_per_batch=max_items_per_batch)
-        print(f" {len(batches_of_morphemes)} batches loaded", file=sys.stderr)
-        sys.stderr.flush()
+        logging.info(f"{len(batches_of_morphemes)} batches loaded")
 
         self.train()
-        for epoch in range(num_epochs):
+
+        if cuda_device < 0:
+            self.cpu()
+        else:
+            self.cuda(device=cuda_device)
+        
+        for epoch in range(1, num_epochs+1):
             optimizer.zero_grad()
 
             total_loss = 0
@@ -139,21 +133,21 @@ class Autoencoder(torch.nn.Module):
                 for tensor_number, tensor in enumerate(list_of_tensors):
                     training_data[tensor_number] = tensor.data
 
-                training_data = training_data.cuda()
-                prediction = self(training_data)
+                data_on_device = training_data.cuda(device=cuda_device) if cuda_device >= 0 else training_data.cpu()
+
+                prediction = self(data_on_device)
 
                 # Compute Loss
-                loss = criterion(prediction.squeeze(), training_data)
+                loss = criterion(prediction.squeeze(), data_on_device)
                 total_loss += loss.item()
 
                 loss.backward()
 
-            print(f"{datetime.now()}\tEpoch {str(epoch).zfill(len(str(num_epochs)))}\ttrain loss: {loss.item()}",
-                  file=sys.stderr)
-
-            sys.stderr.flush()
-
-            if epoch % save_frequency == 0:
+                
+            logging.info(f"Epoch {str(epoch).zfill(len(str(num_epochs)))}\ttrain loss: {loss.item()}")
+            
+            if epoch % save_frequency == 0 or epoch == num_epochs:
+                logging.info(f"Saving model to model_at_epoch_{str(epoch).zfill(len(str(num_epochs)))}.pt")
                 torch.save(self, f"model_at_epoch_{str(epoch).zfill(len(str(num_epochs)))}.pt")
 
             # Backward pass
@@ -216,7 +210,12 @@ def program_arguments():
         default="INFO",
         help="Verbosity level"
     )
-
+    arg_parser.add_argument(
+        "--cuda_device",
+        type=int,
+        required=True,
+        help="Number specifying which cuda device should be used. A negative number means run on CPU."
+    )
     return arg_parser
 
 
@@ -227,20 +226,19 @@ def main():
 
     if args.tensor_file:
 
-        logging.info("Starting program...")
-
-        sys.stderr.flush()
+        logging.basicConfig(level=args.verbose, stream=sys.stderr, datefmt="%Y-%m-%d %H:%M:%S", format="%(asctime)s\t%(message)s")
+        logging.info("Training autoencoder...")
 
         data = Tensors.load_from_pickle_file(args.tensor_file)
 
         model = Autoencoder(input_dimension_size=data.input_dimension_size,
                             hidden_layer_size=args.hidden_layer_size,
-                            num_hidden_layers=args.hidden_layers).cuda()
+                            num_hidden_layers=args.hidden_layers)
 
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-        model.run_training(data, criterion, optimizer, args.epochs, args.batch_size, args.save_frequency)
+        model.run_training(data, criterion, optimizer, args.epochs, args.batch_size, args.save_frequency, args.cuda_device)
 
     else:
 
