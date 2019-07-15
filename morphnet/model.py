@@ -12,14 +12,15 @@ class Encoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.embed_size = embed_size
-        self.embed = nn.Embedding(input_size, embed_size)
+        self.embed = nn.Embedding(input_size+1, embed_size)
         self.gru = nn.GRU(
             embed_size, hidden_size, n_layers, dropout=dropout, bidirectional=True
         )
 
     def forward(self, src, hidden=None):
-        print(f"In src.is_cuda is {src.is_cuda}", file=sys.stderr)
+        #print(f"In src.is_cuda is {src.is_cuda}", file=sys.stderr)
         sys.stderr.flush()
+        #print(src)
         embedded = self.embed(src)
         outputs, hidden = self.gru(embedded, hidden)
         # sum bidirectional outputs
@@ -75,7 +76,7 @@ class Decoder(nn.Module):
         # Get the embedding of the current input word (last output word)
         # embedded = self.embed(input).unsqueeze(0)  # (1,B,N)
         embedded = self.dropout(inp)
-        embedded = embedded.view(32, -1).unsqueeze(0)
+        embedded = embedded.view(embedded.size()[0], -1).unsqueeze(0)
         # Calculate attention weights and apply to encoder outputs
         attn_weights = self.attention(last_hidden[-1], encoder_outputs)
         context = attn_weights.bmm(encoder_outputs.transpose(0, 1))  # (B,1,N)
@@ -90,16 +91,17 @@ class Decoder(nn.Module):
         return output, hidden, attn_weights
 
 class Seq2Seq(nn.Module):
-    def __init__(self, encoder, decoder):
+    def __init__(self, encoder, decoder, device):
         super(Seq2Seq, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
+        self.device = device
 
     def forward(self, src, trg, teacher_forcing_ratio=0.5):
         batch_size = src.size(1)
         max_len = trg.size(0)
         morph_size = self.decoder.output_size
-        outputs = Variable(torch.zeros(max_len, batch_size, morph_size)).cuda()
+        outputs = Variable(torch.zeros(max_len, batch_size, morph_size)).to(self.device)
 
         encoder_output, hidden = self.encoder(src)
         hidden = hidden[: self.decoder.n_layers]
@@ -109,5 +111,5 @@ class Seq2Seq(nn.Module):
             outputs[t] = output
             is_teacher = random.random() < teacher_forcing_ratio
             # top1 = output.data.max(1)[1]
-            output = Variable(trg.data[t] if is_teacher else output).cuda()
+            output = Variable(trg.data[t] if is_teacher else output).to(self.device)
         return outputs
