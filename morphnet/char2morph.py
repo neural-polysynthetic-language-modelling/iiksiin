@@ -42,15 +42,27 @@ class Char2MorphDataset(Dataset):
 
     def _init_dataset(self, tensor_file, morph_file):
         with open(morph_file) as mfile:
-            self.segmented_corpus = mfile.readlines()
+            segmented_corpus = mfile.readlines()
 
         with gzip.open(tensor_file) as tfile:
             self.tensor_dict, self.alphabet = pickle.load(tfile, encoding='utf8')
         self.morph_size = next(iter(self.tensor_dict.values())).numel()
 
+        self.corpus = []
         self.length = 0
-        for line in self.segmented_corpus:
-            self.length += 1
+        for line in segmented_corpus:
+            words = line.split()
+            for word in words:
+                analyzable = True
+                for morph in word.split(self.morph_delim):
+                    if morph not in self.tensor_dict:
+                        analyzable = False
+                        break
+                if not analyzable:
+                    break
+                self.corpus.append(word)
+                self.length += 1
+        self.corpus.sort(reverse=False, key=len)
 
     def __len__(self):
         return self.length
@@ -60,17 +72,23 @@ class Char2MorphDataset(Dataset):
         position[index] = 1
         return torch.einsum("...j,k->...jk", (morph, position))
 
+    def _get_tensor(self, morph):
+        if morph in self.tensor_dict:
+            return self.tensor_dict[morph].data
+        else:
+            return torch.zeros(next(iter(self.tensor_dict.values())).size())
+
     def _morph_tensors(self, line):
         morphs = [word.split('>') for word in line.split()]
         return torch.stack(
-                [self._bind_morph_to_position(self.tensor_dict[morph].data, i) for word in morphs for i, morph in enumerate(word)]
+                [self._bind_morph_to_position(self._get_tensor(morph), i) for word in morphs for i, morph in enumerate(word)]
         )
 
     def _charstoi(self, chars):
         return torch.LongTensor([self.alphabet[c] for c in chars])
 
     def _input_tensors(self, line):
-        chars = line.replace(self.morph_delim, "")[:-1]
+        chars = line.replace(self.morph_delim, "").replace('\n', "")
 
         # tensor = torch.zeros(len(chars), len(self.alphabet))
         # ones = torch.ones(len(chars), len(self.alphabet))
@@ -79,8 +97,8 @@ class Char2MorphDataset(Dataset):
 
     def __getitem__(self, idx):
         sample = {
-            "chars": self._input_tensors(self.segmented_corpus[idx]),
-            "morphs": self._morph_tensors(self.segmented_corpus[idx]),
+            "chars": self._input_tensors(self.corpus[idx]),
+            "morphs": self._morph_tensors(self.corpus[idx]),
         }
         if self.transform:
             sample = self.transform(sample)
@@ -89,9 +107,13 @@ class Char2MorphDataset(Dataset):
 def char2morph_collate(batch):
     chars = [item['chars'] for item in batch]
     morphs = [item['morphs'] for item in batch]
+    #print(morphs[0].size())
     # Need to switch to enforce_sorted if we wanna use ONNX
     chars = pad_sequence(chars)#, enforce_sorted=False)
     morphs = pad_sequence(morphs)#, enforce_sorted=False)
+    #print(morphs[:,0].size())
+    #print(morphs.size())
+    #print(morphs[31,0])
     return {'chars': chars, 'morphs': morphs}
 
 def load_data(batch_size, morph_dir, tensor_file):
@@ -110,7 +132,7 @@ def load_data(batch_size, morph_dir, tensor_file):
     )
 
 
-def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet):
+def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet, device):
     model.train()
     pad = alphabet["\u0004"]
     total_loss = 0
@@ -122,34 +144,34 @@ def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet):
         src = batch['chars']
         trg = batch['morphs']
 
-        print(f"Starting batch {b} with src ({src.shape}) and tgt ({trg.shape})...", end="", file=sys.stderr)
+        # print(f"Starting batch {b} with src ({src.shape}) and tgt ({trg.shape})...", end="\n", file=sys.stderr)
 
 #        del src_tensor
 #        del tgt_tensor
 
-#        src_tensor = torch.tensor(src.data).cuda()
-#        tgt_tensor = torch.tensor(trg.data).cuda()
+#        src_tensor = torch.tensor(src.data).to(device)
+#        tgt_tensor = torch.tensor(trg.data).to(device)
         
 #        src_tensor=src if src_tensor is None else src_tensor.
 #        if src_tensor is None:
-#            src_tensor = src.cuda()
-#            src_tensor.cuda()
+#            src_tensor = src.to(device)
+#            src_tensor.to(device)
 #        else:
 #            print(f"Before, src_tensor.is_cuda == {src_tensor.is_cuda}", file=sys.stderr)
-#            src_tensor.data = src.data.cuda()
+#            src_tensor.data = src.data.to(device)
 #            print(f"After, src_tensor.is_cuda == {src_tensor.is_cuda}", file=sys.stderr)           # 
 #            
 #        if tgt_tensor is None:
-#            tgt_tensor = trg.cuda()
-#            tgt_tensor.cuda()
+#            tgt_tensor = trg.to(device)
+#            tgt_tensor.to(device)
 #        else:
-#            tgt_tensor.data = trg.data.cuda()
+#            tgt_tensor.data = trg.data.to(device)
         
         
         
         # TODO: Remove volatile=True and replace with with torch.no_grad():
-        src_tensor = Variable(src.data.cuda(), volatile=True)
-        tgt_tensor = Variable(trg.data.cuda(), volatile=True)
+        src_tensor = Variable(src.data.to(device), volatile=True)
+        tgt_tensor = Variable(trg.data.to(device), volatile=True)
         del src
         del trg
         
@@ -157,41 +179,39 @@ def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet):
 
         # fix
         loss = F.mse_loss(output.view(-1), tgt_tensor.contiguous().view(-1))
-        total_loss += loss.data[0] # TODO: UserWarning: invalid index of a 0-dim tensor. This will be an error in PyTorch 0.5. Use tensor.item() to convert a 0-dim tensor to a Python number
+        total_loss += loss.data # TODO: UserWarning: invalid index of a 0-dim tensor. This will be an error in PyTorch 0.5. Use tensor.item() to convert a 0-dim tensor to a Python number
         del output
         del loss
-        print(f"batch {b} complete.", file=sys.stderr)
+   #     print(f"batch {b} complete.", file=sys.stderr)
         sys.stderr.flush()
-    return total_loss / len(val_iter)
+        if b % 100 == 0:
+            total_loss = total_loss / 100
+            print("[%d][loss:%5.2f][pp:%5.2f]" %
+                    (b, total_loss, math.exp(total_loss)))
+            sys.stdout.flush()
+            total_loss = 0
 
 
-def evaluate(e, model, optimizer, val_iter, tensor_size, alphabet):
+def evaluate(model, val_iter, tensor_size, alphabet, device):
     model.eval()
     pad = alphabet["\u0004"]
     total_loss = 0
-    for b, batch in enumerate(train_iter):
-        src, len_src = batch.chars  # not sure if this is the right interface for batch
-        trg, len_trg = batch.morphs
-        src, trg = src.cuda(), trg.cuda()
-        optimizer.zero_grad()
+    for b, batch in enumerate(val_iter):
+        src = batch['chars']  # not sure if this is the right interface for batch
+        trg = batch['morphs']
+        src, trg = src.to(device), trg.to(device)
         output = model(src, trg)
 
         # fix
         loss = F.mse_loss(output.view(-1), trg.contiguous().view(-1), ignore_index=pad)
-        loss.backward()
-        clip_grad_norm(model.parameters(), grad_clip)
-        optimizer.step()
         total_loss += loss.data[0]
 
         del src
         del trg
         del loss
         del output
-        
-        if b % 100 == 0 and b != 0:
-            total_loss = total_loss / 100
-            print("[%d][loss:%5.2f][pp:%5.2f]" % (b, total_loss, math.exp(total_loss)))
-            total_loss = 0
+    return total_loss / val_iter 
+
 
 def debug():
     import sys
@@ -202,6 +222,12 @@ def flush():
     sys.stderr.flush
     sys.stdout.flush()
 
+def get_freer_gpu():
+    import os
+    os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >cuda')
+    memory_available = [int(x.split()[2]) for x in open('cuda', 'r').readlines()]
+    import numpy as np
+    return np.argmax(memory_available)
 
 def main():
 
@@ -210,7 +236,8 @@ def main():
     args = parse_arguments()
     hidden_size = 512
     embed_size = 256
-    assert torch.cuda.is_available()
+    device = torch.device("cpu")
+    device = torch.device(f"cuda:{get_freer_gpu()}" if torch.cuda.is_available() else "cpu")
 
     print("[!] preparing dataset...", file=sys.stderr)
     train_iter, dev_iter, test_iter, alphabet, morph_size = load_data(
@@ -233,14 +260,14 @@ def main():
     print("[!] Instantiating models...", file=sys.stderr)
     encoder = Encoder(len(alphabet), embed_size, hidden_size, n_layers=2, dropout=0.5)
     decoder = Decoder(morph_size*args.max_num_morphs, hidden_size, morph_size*args.max_num_morphs, n_layers=1, dropout=0.5)
-    seq2seq = Seq2Seq(encoder, decoder).cuda()
+    seq2seq = Seq2Seq(encoder, decoder, device).to(device)
     optimizer = optim.Adam(seq2seq.parameters(), lr=args.lr)
     print(seq2seq, file=sys.stderr)
 
     best_dev_loss = None
     for e in range(1, args.epochs + 1):
-        train(e, seq2seq, optimizer, train_iter, morph_size, args.grad_clip, alphabet)
-        dev_loss = evaluate(seq2seq, test_iter, morph_size, alphabet)
+        train(e, seq2seq, optimizer, train_iter, morph_size, args.grad_clip, alphabet, device)
+        dev_loss = evaluate(seq2seq, dev_iter, morph_size, alphabet, device)
         print(
             "[Epoch:%d] dev_loss:%5.3f | dev_pp:%5.2fS"
             % (e, dev_loss, math.exp(dev_loss)),
@@ -254,7 +281,7 @@ def main():
                 os.makedirs(".save")
             torch.save(seq2seq.state_dict(), "./.save/char2morph_%d.pt" % (e))
             best_dev_loss = dev_loss
-    test_loss = evaluate(seq2seq, test_iter, morph_size, alphabet)
+    test_loss = evaluate(seq2seq, test_iter, morph_size, alphabet, device)
     print("[TEST] loss:%5.2f" % test_loss, file=sys.stderr)
     flush()
 
