@@ -37,6 +37,7 @@ class Tensors:
         self.alphabet = alphabet
         self.morph_size = next(iter(self.tensor_dict.values())).numel()
         self.input_dimension_size = next(iter(self.tensor_dict.values())).view(-1).shape[0]
+#        self.batch_info = BatchInfo(tensor_dict.keys(), items_per_batch)
 
     @staticmethod
     def load_from_pickle_file(tensor_file: str):
@@ -46,31 +47,52 @@ class Tensors:
             tensor_dict, alphabet = pickle.load(f, encoding='utf8')
             return Tensors(tensor_dict, alphabet)
 
-    def get_batches(self, items_per_batch):
+    def get_batch_info(self, items_per_batch):
+        return BatchInfo(self.tensor_dict.keys(), items_per_batch)
+        
+    def get_batches(self, items_per_batch, device_number):
 
+        batch_info = self.get_batch_info(items_per_batch)
+        
+        for batch_of_morphemes in batch_info:
+            tensor = torch.zeros(items_per_batch, self.input_dimension_size)
+            for n, morpheme in enumerate(batch_of_morphemes):
+                tensor[n] = self.tensor_dict[morpheme].view(-1)
+
+            if 0 <= device_number < torch.cuda.device_count():
+                yield tensor.cuda(device_number)
+            else:
+                yield tensor.cpu()
+
+                
+class BatchInfo:
+    """Store information necessary to identify a morpheme given a batch number and an index within that batch."""
+    
+    def __init__(self, morphemes, items_per_batch):
         sizes_dict = dict()
-        for morpheme in self.tensor_dict.keys():
+        for morpheme in morphemes:
             length = len(morpheme)
             if length not in sizes_dict:
                 sizes_dict[length] = list()
             sizes_dict[length].append(morpheme)
 
-        batches_of_morphemes = list()
-        batch_of_morphemes = list()
+        self._batches = list()
+        current_batch = list()
         for length in sorted(sizes_dict.keys()):
             for morpheme in sizes_dict[length]:
-                if len(batch_of_morphemes) == items_per_batch:
-                    batches_of_morphemes.append(batch_of_morphemes)
-                    batch_of_morphemes = list()
-                batch_of_morphemes.append(morpheme)
-        if len(batch_of_morphemes) > 0:
-            batches_of_morphemes.append(batch_of_morphemes)
+                if len(current_batch) == items_per_batch:
+                    self._batches.append(current_batch)
+                    current_batch = list()
+                current_batch.append(morpheme)
+        if len(current_batch) > 0:
+            self._batches.append(current_batch)
 
-        batches_of_tensors = [[self.tensor_dict[morpheme].view(-1) for morpheme in batch_of_morphemes] for
-                              batch_of_morphemes in batches_of_morphemes]
+    def __getitem__(self, index):
+        return self._batches[index]
 
-        return batches_of_morphemes, batches_of_tensors
-
+    def __iter__(self):
+        return iter(self._batches)
+    
 
 class Autoencoder(torch.nn.Module):
 
@@ -87,11 +109,11 @@ class Autoencoder(torch.nn.Module):
         self.output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
         
     def forward(self, input_layer):
-        final_hidden_layer = self.apply_hidden_layers(input_layer)
-        output_layer = self.apply_output_layer(final_hidden_layer)
+        final_hidden_layer = self._apply_hidden_layers(input_layer)
+        output_layer = self._apply_output_layer(final_hidden_layer)
         return output_layer
 
-    def apply_hidden_layers(self, input_layer):
+    def _apply_hidden_layers(self, input_layer):
         previous_layer = input_layer
 
         for hidden in self.hidden_layers:
@@ -100,9 +122,35 @@ class Autoencoder(torch.nn.Module):
 
         return current_layer
 
-    def apply_output_layer(self, hidden_layer):
+    def _apply_output_layer(self, hidden_layer):
         return sigmoid(self.output_layer(hidden_layer))
 
+    def run_t2v(self, data, max_items_per_batch: int, cuda_device: int):
+
+        self.eval()
+
+        if cuda_device < 0:
+            self.cpu()
+        else:
+            self.cuda(device=cuda_device)
+
+        results = dict()
+        batch_info = data.get_batch_info(max_items_per_batch)
+        for batch_number, data_on_device in enumerate(data.get_batches(items_per_batch=max_items_per_batch, device_number=cuda_device)):    
+
+            batch_of_results = self._apply_hidden_layers(data_on_device)
+
+            morphemes = batch_info[batch_number]
+            number_of_results = batch_of_results.shape[0]
+            for n in range(min(number_of_results, len(morphemes))):
+                morpheme = morphemes[n]
+                tensor = batch_of_results[n]
+                results[morpheme] = tensor
+
+        return results
+            
+        
+    
     def run_training(
             self,
             data: Tensors,
@@ -113,10 +161,6 @@ class Autoencoder(torch.nn.Module):
             save_frequency: int,
             cuda_device: int
     ):
-        logging.info("Loading data...")
-        batches_of_morphemes, batches_of_tensors = data.get_batches(items_per_batch=max_items_per_batch)
-        logging.info(f"{len(batches_of_morphemes)} batches loaded")
-
         self.train()
 
         if cuda_device < 0:
@@ -128,12 +172,8 @@ class Autoencoder(torch.nn.Module):
             optimizer.zero_grad()
 
             total_loss = 0
-            for batch_number, list_of_tensors in enumerate(batches_of_tensors):
-                training_data = torch.zeros(max_items_per_batch, data.input_dimension_size)
-                for tensor_number, tensor in enumerate(list_of_tensors):
-                    training_data[tensor_number] = tensor.data
-
-                data_on_device = training_data.cuda(device=cuda_device) if cuda_device >= 0 else training_data.cpu()
+            
+            for data_on_device in data.get_batches(items_per_batch=max_items_per_batch, device_number=cuda_device):
 
                 prediction = self(data_on_device)
 
@@ -175,7 +215,7 @@ def program_arguments():
     arg_parser.add_argument(
         "--tensor_file",
         type=str,
-        help="Path to pickle file containing dictionary of morpheme tensors.",
+        help="Path to pickle file containing dictionary of morpheme tensors. In training mode and t2v mode, this file will be used as input.",
     )
     arg_parser.add_argument(
         "--hidden_layer_size",
@@ -216,18 +256,39 @@ def program_arguments():
         required=True,
         help="Number specifying which cuda device should be used. A negative number means run on CPU."
     )
+    arg_parser.add_argument(
+        "--model_file",
+        metavar="FILE",
+        type=str,
+        help="Previously trained autoencoder model file"
+    )
+    arg_parser.add_argument(
+        "--mode",
+        type=str,
+        required=True,
+        help="Mode: train (train autoencoder), t2v (convert tensors to vectors using previously trained autoencoder model), v2t (convert vectors to tensors using previously trained autoencoder model), s2v (convert strings to vectors using previously trained autoencoder model)"
+    )
+    arg_parser.add_argument(
+        "--output_file",
+        metavar="FILE",
+        type=str,
+        required=True,
+        help="Path where final result will be saved"
+    )
+    
     return arg_parser
 
 
 def main():
-
+    
     arg_parser = program_arguments()
     args = arg_parser.parse_args()
 
-    if args.tensor_file:
+    logging.basicConfig(level=args.verbose, stream=sys.stderr, datefmt="%Y-%m-%d %H:%M:%S", format="%(asctime)s\t%(message)s")
+    
+    if args.mode == "train" and args.tensor_file:
 
-        logging.basicConfig(level=args.verbose, stream=sys.stderr, datefmt="%Y-%m-%d %H:%M:%S", format="%(asctime)s\t%(message)s")
-        logging.info("Training autoencoder...")
+        logging.info(f"Training autoencoder using tensors in {args.tensor_file} as training data")
 
         data = Tensors.load_from_pickle_file(args.tensor_file)
 
@@ -240,6 +301,25 @@ def main():
 
         model.run_training(data, criterion, optimizer, args.epochs, args.batch_size, args.save_frequency, args.cuda_device)
 
+        torch.save(model, args.output_file)
+        
+    elif args.mode == "t2v" and args.model_file and args.tensor_file:
+
+        import gzip
+        import pickle
+        
+        logging.info(f"Constructing vectors from tensors in {args.tensor_file} using previously trained model {args.model_file}")
+
+        data = Tensors.load_from_pickle_file(args.tensor_file)
+
+        model = torch.load(args.model_file)
+
+        results = model.run_t2v(data, args.batch_size, args.cuda_device)
+
+        with gzip.open(args.output_file, "wb") as output:
+            logging.info(f"Saving gzipped dictionary of morphemes to vectors in {args.output_file}")
+            pickle.dump(results, output)
+        
     else:
 
         arg_parser.print_usage(file=sys.stderr)
