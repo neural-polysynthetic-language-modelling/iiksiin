@@ -240,13 +240,13 @@ class TensorProductRepresentation:
             character_roles=self.character_roles
         )
 
-    def process_morphemes(self, morphemes: Iterable[Iterable[str]]) -> Tensor:
-        return TensorProductRepresentation.process_morphemes_in_word(
-            morphemes=morphemes,
-            alphabet=self.alphabet,
-            character_roles=self.character_roles,
-            morpheme_roles=self.morpheme_roles,
-        )
+    # def process_morphemes(self, morphemes: Iterable[Iterable[str]]) -> Tensor:
+    #     return TensorProductRepresentation.process_morphemes_in_word(
+    #         morphemes=morphemes,
+    #         alphabet=self.alphabet,
+    #         character_roles=self.character_roles,
+    #         morpheme_roles=self.morpheme_roles,
+    #     )
 
     @staticmethod
     def process_characters_in_morpheme(
@@ -265,30 +265,30 @@ class TensorProductRepresentation:
 
         return result
 
-    @staticmethod
-    def process_morphemes_in_word(
-        morphemes: Iterable[Iterable[str]],
-        alphabet: Alphabet,
-        morpheme_roles: Roles,
-        character_roles: Roles,
-    ) -> Tensor:
-
-        result: Tensor = Tensor.zeros(
-            shape=Shape(
-                alphabet.dimension, character_roles.dimension, morpheme_roles.dimension
-            )
-        )
-
-        for index, morpheme in enumerate(morphemes):
-            morpheme_role: Vector = morpheme_roles[index]
-            morpheme_vector: Vector = TensorProductRepresentation.process_characters_in_morpheme(
-                characters=morpheme, alphabet=alphabet, character_roles=character_roles
-            )
-
-            morph_tensor: Tensor = morpheme_vector.tensor_product(morpheme_role)
-            result += morph_tensor
-
-        return result
+    # @staticmethod
+    # def process_morphemes_in_word(
+    #     morphemes: Iterable[Iterable[str]],
+    #     alphabet: Alphabet,
+    #     morpheme_roles: Roles,
+    #     character_roles: Roles,
+    # ) -> Tensor:
+    #
+    #     result: Tensor = Tensor.zeros(
+    #         shape=Shape(
+    #             alphabet.dimension, character_roles.dimension, morpheme_roles.dimension
+    #         )
+    #     )
+    #
+    #     for index, morpheme in enumerate(morphemes):
+    #         morpheme_role: Vector = morpheme_roles[index]
+    #         morpheme_vector: Vector = TensorProductRepresentation.process_characters_in_morpheme(
+    #             characters=morpheme, alphabet=alphabet, character_roles=character_roles
+    #         )
+    #
+    #         morph_tensor: Tensor = morpheme_vector.tensor_product(morpheme_role)
+    #         result += morph_tensor
+    #
+    #     return result
 
 
 def main(
