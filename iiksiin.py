@@ -2,7 +2,7 @@ import grapheme  # type: ignore
 import gzip
 import torch     # type: ignore
 import sys
-from typing import Dict, List, Callable, Set, Mapping, Iterable
+from typing import Dict, List, Callable, Tuple, Set, Mapping, Iterable, Iterator
 import unicodedata
 
 """Implements Tensor Product Representation for potentially multi-morphemic words.
@@ -48,9 +48,9 @@ class Dimension:
 
 class Shape:
     def __init__(self, *dimensions: Dimension):
-        self.dimensions: List[Dimension] = dimensions
+        self.dimensions: Tuple[Dimension] = dimensions
         self._name2dimension: Mapping[str, Dimension] = {
-            name: dimensions[index] for (index, name) in enumerate(dimensions)
+            dimension.name: dimensions[index] for (index, dimension) in enumerate(dimensions)
         }
 
     def __len__(self) -> int:
@@ -61,7 +61,7 @@ class Shape:
         """Gets the size of the named dimension."""
         return len(self._name2dimension[name])
 
-    def __iter__(self) -> Iterable[Dimension]:
+    def __iter__(self) -> Iterator[Dimension]:
         return iter(self.dimensions)
 
     def __str__(self) -> str:
