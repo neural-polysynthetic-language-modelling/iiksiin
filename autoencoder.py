@@ -1,10 +1,11 @@
 #!/usr/bin/env python3.7
 
 import logging
-import torch
-import torch.nn
-from torch import sigmoid
-from torch.nn.functional import relu
+import torch                           # type: ignore
+import torch.nn                        # type: ignore
+from torch import sigmoid              # type: ignore
+from torch.nn.functional import relu   # type: ignore
+from typing import Dict, List, Callable, Set, Mapping, Iterable
 import sys
 
 """Implements an autoencoder to embed Tensor Product Representation tensors into smaller vectors.
@@ -30,43 +31,9 @@ if sys.version_info < (3, 7):
     raise RuntimeError(f"{__file__} requires Python 3.7 or later")
 
 
-class Tensors:
-
-    def __init__(self, tensor_dict, alphabet):
-        self.tensor_dict = tensor_dict
-        self.alphabet = alphabet
-        self.morph_size = next(iter(self.tensor_dict.values())).numel()
-        self.input_dimension_size = next(iter(self.tensor_dict.values())).view(-1).shape[0]
-
-    @staticmethod
-    def load_from_pickle_file(tensor_file: str):
-        import pickle
-        import gzip
-        with gzip.open(tensor_file) as f:
-            tensor_dict, alphabet = pickle.load(f, encoding='utf8')
-            return Tensors(tensor_dict, alphabet)
-
-    def get_batch_info(self, items_per_batch):
-        return BatchInfo(self.tensor_dict.keys(), items_per_batch)
-        
-    def get_batches(self, items_per_batch, device_number):
-
-        batch_info = self.get_batch_info(items_per_batch)
-        
-        for batch_of_morphemes in batch_info:
-            tensor = torch.zeros(items_per_batch, self.input_dimension_size)
-            for n, morpheme in enumerate(batch_of_morphemes):
-                tensor[n] = self.tensor_dict[morpheme].view(-1)
-
-            if 0 <= device_number < torch.cuda.device_count():
-                yield tensor.cuda(device_number)
-            else:
-                yield tensor.cpu()
-
-                
 class BatchInfo:
     """Store information necessary to identify a morpheme given a batch number and an index within that batch."""
-    
+
     def __init__(self, morphemes, items_per_batch):
         sizes_dict = dict()
         for morpheme in morphemes:
@@ -91,7 +58,41 @@ class BatchInfo:
 
     def __iter__(self):
         return iter(self._batches)
-    
+
+
+class Tensors:
+
+    def __init__(self, tensor_dict, alphabet):
+        self.tensor_dict = tensor_dict
+        self.alphabet = alphabet
+        self.morph_size = next(iter(self.tensor_dict.values())).numel()
+        self.input_dimension_size = next(iter(self.tensor_dict.values())).view(-1).shape[0]
+
+    @staticmethod
+    def load_from_pickle_file(tensor_file: str) -> "Tensors":
+        import pickle
+        import gzip
+        with gzip.open(tensor_file) as f:
+            tensor_dict, alphabet = pickle.load(f, encoding='utf8')
+            return Tensors(tensor_dict, alphabet)
+
+    def get_batch_info(self, items_per_batch) -> BatchInfo:
+        return BatchInfo(self.tensor_dict.keys(), items_per_batch)
+        
+    def get_batches(self, items_per_batch, device_number) -> Iterable[torch.Tensor]:
+
+        batch_info = self.get_batch_info(items_per_batch)
+        
+        for batch_of_morphemes in batch_info:
+            tensor = torch.zeros(items_per_batch, self.input_dimension_size)
+            for n, morpheme in enumerate(batch_of_morphemes):
+                tensor[n] = self.tensor_dict[morpheme].view(-1)
+
+            if 0 <= device_number < torch.cuda.device_count():
+                yield tensor.cuda(device_number)
+            else:
+                yield tensor.cpu()
+
 
 class Autoencoder(torch.nn.Module):
 
@@ -112,7 +113,7 @@ class Autoencoder(torch.nn.Module):
         output_layer = self._apply_output_layer(final_hidden_layer)
         return output_layer
 
-    def _apply_hidden_layers(self, input_layer):
+    def _apply_hidden_layers(self, input_layer) -> torch.nn.Module:
         previous_layer = input_layer
 
         for hidden in self.hidden_layers:
@@ -121,8 +122,20 @@ class Autoencoder(torch.nn.Module):
 
         return current_layer
 
-    def _apply_output_layer(self, hidden_layer):
+    def _apply_output_layer(self, hidden_layer) -> torch.nn.Module:
         return sigmoid(self.output_layer(hidden_layer))
+
+    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
+
+        self.eval()
+
+        if cuda_device < 0:
+            self.cpu()
+        else:
+            self.cuda(device=cuda_device)
+
+        results = dict()
+        batch_info: BatchInfo = data.get_batch_info(max_items_per_batch)
 
     def run_t2v(self, data, max_items_per_batch: int, cuda_device: int):
 
@@ -134,7 +147,7 @@ class Autoencoder(torch.nn.Module):
             self.cuda(device=cuda_device)
 
         results = dict()
-        batch_info = data.get_batch_info(max_items_per_batch)
+        batch_info: BatchInfo = data.get_batch_info(max_items_per_batch)
         for batch_number, data_on_device in enumerate(data.get_batches(items_per_batch=max_items_per_batch,
                                                                        device_number=cuda_device)):
 
@@ -265,7 +278,11 @@ def program_arguments():
         "--mode",
         type=str,
         required=True,
-        help="Mode: train (train autoencoder), t2v (convert tensors to vectors using previously trained autoencoder model), v2t (convert vectors to tensors using previously trained autoencoder model), s2v (convert strings to vectors using previously trained autoencoder model)"
+        help="Mode: " +
+             "train (train autoencoder), " +
+             "t2v (convert tensors to vectors using previously trained autoencoder model), " +
+             "v2t (convert vectors to tensors using previously trained autoencoder model), " +
+             "s2v (convert strings to vectors using previously trained autoencoder model)"
     )
     arg_parser.add_argument(
         "--output_file",
@@ -290,7 +307,7 @@ def main():
 
         logging.info(f"Training autoencoder using tensors in {args.tensor_file} as training data")
 
-        data = Tensors.load_from_pickle_file(args.tensor_file)
+        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
 
         model = Autoencoder(input_dimension_size=data.input_dimension_size,
                             hidden_layer_size=args.hidden_layer_size,
@@ -317,7 +334,7 @@ def main():
         logging.info(f"Constructing vectors from tensors in {args.tensor_file} "
                      "using previously trained model {args.model_file}")
 
-        data = Tensors.load_from_pickle_file(args.tensor_file)
+        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
 
         model = torch.load(args.model_file)
 
