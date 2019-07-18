@@ -39,10 +39,10 @@ class Dimension:
     def __str__(self) -> str:
         return f"{self._length}"
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self._length
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Dimension({self._name}, {self._length})"
 
 
@@ -64,10 +64,10 @@ class Shape:
     def __iter__(self) -> Iterable[Dimension]:
         return iter(self.dimensions)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"({','.join([str(len(dimension)) for dimension in self.dimensions])})"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Shape({', '.join([str(dimension) for dimension in self.dimensions])})"
 
 
@@ -77,12 +77,12 @@ class Tensor:
         self.data = data
 
     @staticmethod
-    def zeros(shape: Shape):
+    def zeros(shape: Shape) -> "Tensor":
         return Tensor(
             shape=shape, data=torch.zeros(size=[len(dimension) for dimension in shape])
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.shape)
 
     def tensor_product(self, other: "Vector") -> "Tensor":
@@ -133,17 +133,17 @@ class OneHotVector(Vector):
                 f'The provided index {index} is invalid for "{repr(dimension)}"'
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"One hot at index {self._index} of {repr(self.dimension)}"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"OneHotVector({self._index}, {self.dimension})"
 
 
 class Alphabet:
 
-    END_OF_MORPHEME = "\u0000"
-    END_OF_TRANSMISSION = "\u0004"
+    END_OF_MORPHEME: str = "\u0000"
+    END_OF_TRANSMISSION: str = "\u0004"
 
     def __init__(self, name: str, symbols: Set[str]):
         alphabet_symbols = set(symbols)
@@ -162,10 +162,10 @@ class Alphabet:
         else:
             return self.oov
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Alphabet({str(self.dimension)})"
 
     @staticmethod
@@ -208,11 +208,7 @@ class Roles:
         self.dimension: Dimension = dimension
 
     def __getitem__(self, index) -> Vector:
-        # try:
         return self._one_hot_role_vectors[index]
-        # except IndexError:
-        #    raise IndexError(f"Attempted to access a Role vector at out-of-bounds index {index}. " +
-        #                     f"Re-run the script with a higher maximum value for the relevant parameter.")
 
     def __iter__(self) -> Iterable[Vector]:
         return iter(self._one_hot_role_vectors)
@@ -237,14 +233,14 @@ class TensorProductRepresentation:
             morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
         )
 
-    def process_morpheme(self, morpheme: Iterable[str]):
+    def process_morpheme(self, morpheme: Iterable[str]) -> Tensor:
         return TensorProductRepresentation.process_characters_in_morpheme(
             characters=list(morpheme) + [Alphabet.END_OF_MORPHEME],
             alphabet=self.alphabet,
             character_roles=self.character_roles
         )
 
-    def process_morphemes(self, morphemes: Iterable[Iterable[str]]):
+    def process_morphemes(self, morphemes: Iterable[Iterable[str]]) -> Tensor:
         return TensorProductRepresentation.process_morphemes_in_word(
             morphemes=morphemes,
             alphabet=self.alphabet,
@@ -405,8 +401,6 @@ def main(
                             try:
                                 tensor: Tensor = tpr.process_morpheme(morpheme)
                                 result[morpheme] = tensor.data
-#                            print(f"ord {word} has a tensor of shape {tensor.shape}", file=sys.stderr)
-#                                result[word] = tensor.data
                             except IndexError:
                                 print(f"WARNING - unable to process morpheme {morpheme} of {word}", file=sys.stderr)
 
@@ -492,8 +486,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
 
     args = arg_parser.parse_args()
-    # print(args.morpheme_delimiter)
-    # sys.exit(-1)
+
     main(
         max_characters=args.max_characters,
         max_morphemes=args.max_morphemes,

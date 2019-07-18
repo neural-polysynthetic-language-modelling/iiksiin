@@ -37,7 +37,6 @@ class Tensors:
         self.alphabet = alphabet
         self.morph_size = next(iter(self.tensor_dict.values())).numel()
         self.input_dimension_size = next(iter(self.tensor_dict.values())).view(-1).shape[0]
-#        self.batch_info = BatchInfo(tensor_dict.keys(), items_per_batch)
 
     @staticmethod
     def load_from_pickle_file(tensor_file: str):
@@ -136,7 +135,8 @@ class Autoencoder(torch.nn.Module):
 
         results = dict()
         batch_info = data.get_batch_info(max_items_per_batch)
-        for batch_number, data_on_device in enumerate(data.get_batches(items_per_batch=max_items_per_batch, device_number=cuda_device)):    
+        for batch_number, data_on_device in enumerate(data.get_batches(items_per_batch=max_items_per_batch,
+                                                                       device_number=cuda_device)):
 
             batch_of_results = self._apply_hidden_layers(data_on_device)
 
@@ -148,8 +148,6 @@ class Autoencoder(torch.nn.Module):
                 results[morpheme] = tensor
 
         return results
-            
-        
     
     def run_training(
             self,
@@ -215,7 +213,8 @@ def program_arguments():
     arg_parser.add_argument(
         "--tensor_file",
         type=str,
-        help="Path to pickle file containing dictionary of morpheme tensors. In training mode and t2v mode, this file will be used as input.",
+        help="Path to pickle file containing dictionary of morpheme tensors. " +
+             "In training mode and t2v mode, this file will be used as input.",
     )
     arg_parser.add_argument(
         "--hidden_layer_size",
@@ -284,7 +283,8 @@ def main():
     arg_parser = program_arguments()
     args = arg_parser.parse_args()
 
-    logging.basicConfig(level=args.verbose, stream=sys.stderr, datefmt="%Y-%m-%d %H:%M:%S", format="%(asctime)s\t%(message)s")
+    logging.basicConfig(level=args.verbose, stream=sys.stderr,
+                        datefmt="%Y-%m-%d %H:%M:%S", format="%(asctime)s\t%(message)s")
     
     if args.mode == "train" and args.tensor_file:
 
@@ -299,7 +299,13 @@ def main():
         criterion = torch.nn.MSELoss()
         optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-        model.run_training(data, criterion, optimizer, args.epochs, args.batch_size, args.save_frequency, args.cuda_device)
+        model.run_training(data,
+                           criterion,
+                           optimizer,
+                           args.epochs,
+                           args.batch_size,
+                           args.save_frequency,
+                           args.cuda_device)
 
         torch.save(model, args.output_file)
         
@@ -308,7 +314,8 @@ def main():
         import gzip
         import pickle
         
-        logging.info(f"Constructing vectors from tensors in {args.tensor_file} using previously trained model {args.model_file}")
+        logging.info(f"Constructing vectors from tensors in {args.tensor_file} "
+                     "using previously trained model {args.model_file}")
 
         data = Tensors.load_from_pickle_file(args.tensor_file)
 
