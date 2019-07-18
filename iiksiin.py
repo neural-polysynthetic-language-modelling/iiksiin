@@ -33,7 +33,7 @@ if sys.version_info < (3, 7):
 
 class Dimension:
     def __init__(self, name: str, size: int):
-        self._name = name
+        self.name = name
         self._length = size
 
     def __str__(self) -> str:
@@ -43,12 +43,12 @@ class Dimension:
         return self._length
 
     def __repr__(self) -> str:
-        return f"Dimension({self._name}, {self._length})"
+        return f"Dimension({self.name}, {self._length})"
 
 
 class Shape:
     def __init__(self, *dimensions: Dimension):
-        self.dimensions: Tuple[Dimension] = dimensions
+        self.dimensions: Tuple[Dimension, ...] = dimensions
         self._name2dimension: Mapping[str, Dimension] = {
             dimension.name: dimensions[index] for (index, dimension) in enumerate(dimensions)
         }
@@ -98,7 +98,7 @@ class Tensor:
 
            The value result[d][...][i][j][k] = self[d][...][i][j] * other[k]
         """
-        resulting_dimensions: List[
+        resulting_dimensions: Iterable[
             Dimension
         ] = self.shape.dimensions + other.shape.dimensions
         resulting_shape: Shape = Shape(
