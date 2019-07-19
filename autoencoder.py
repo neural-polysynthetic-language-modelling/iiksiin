@@ -4,6 +4,7 @@ from iiksiin import Alphabet
 import logging
 import torch                           # type: ignore
 import torch.nn                        # type: ignore
+import torch.optim                     # type: ignore
 from torch import sigmoid              # type: ignore
 from torch.nn.functional import relu   # type: ignore
 from typing import Mapping, Dict, List, Tuple, Iterable, Iterator
@@ -45,11 +46,11 @@ class BatchInfo:
 
         self._batches: List[List[str]] = list()
         current_batch: List[str] = list()
-        for length in sorted(sizes_dict.keys()):
-            for morpheme in sizes_dict[length]:
+        for length in sorted(sizes_dict.keys()):  # type: int
+            for morpheme in sizes_dict[length]:   # type: str
                 if len(current_batch) == items_per_batch:
                     self._batches.append(current_batch)
-                    current_batch = list()
+                    current_batch: List[str] = list()
                 current_batch.append(morpheme)
         if len(current_batch) > 0:
             self._batches.append(current_batch)
@@ -64,10 +65,10 @@ class BatchInfo:
 class Tensors:
 
     def __init__(self, tensor_dict: Mapping[str, torch.Tensor], alphabet: Alphabet):
-        self.tensor_dict = tensor_dict
-        self.alphabet = alphabet
-        self.morph_size = next(iter(self.tensor_dict.values())).numel()
-        self.input_dimension_size = next(iter(self.tensor_dict.values())).view(-1).shape[0]
+        self.tensor_dict: Mapping[str, torch.Tensor] = tensor_dict
+        self.alphabet: Alphabet = alphabet
+        self.morph_size: int = next(iter(self.tensor_dict.values())).numel()  # Get the number of elements in a Tensor
+        self.input_dimension_size: int = next(iter(self.tensor_dict.values())).view(-1).shape[0]
 
     @staticmethod
     def load_from_pickle_file(tensor_file: str) -> "Tensors":
@@ -83,19 +84,22 @@ class Tensors:
     def get_batch_info(self, items_per_batch) -> BatchInfo:
         return BatchInfo(self.tensor_dict.keys(), items_per_batch)
         
-    def get_batches(self, items_per_batch, device_number) -> Iterable[torch.Tensor]:
+    def get_batches(self, items_per_batch, device_number) -> Iterable[Tuple[int, torch.Tensor]]:
 
-        batch_info = self.get_batch_info(items_per_batch)
-        
-        for batch_of_morphemes in batch_info:
-            tensor = torch.zeros(items_per_batch, self.input_dimension_size)
-            for n, morpheme in enumerate(batch_of_morphemes):
+        batch_info: BatchInfo = self.get_batch_info(items_per_batch)
+        batch_number: int = -1
+        for batch_of_morphemes in batch_info:  # type: List[str]
+            batch_number: int = batch_number + 1
+            tensor: torch.Tensor = torch.zeros(items_per_batch, self.input_dimension_size)
+            for numbered_morpheme in enumerate(batch_of_morphemes):  # type: Tuple[int, str]
+                n: int = numbered_morpheme[0]
+                morpheme: str = numbered_morpheme[1]
                 tensor[n] = self.tensor_dict[morpheme].view(-1)
 
             if 0 <= device_number < torch.cuda.device_count():
-                yield tensor.cuda(device_number)
+                yield (batch_number, tensor.cuda(device_number))
             else:
-                yield tensor.cpu()
+                yield (batch_number, tensor.cpu())
 
 
 class Autoencoder(torch.nn.Module):
@@ -104,30 +108,30 @@ class Autoencoder(torch.nn.Module):
         super().__init__()
         self.input_dimension_size: int = input_dimension_size
         self.hidden_layer_size: int = hidden_layer_size
-        self.hidden_layers = torch.nn.ModuleList()
-        for n in range(num_hidden_layers):
+        self.hidden_layers: torch.nn.ModuleList = torch.nn.ModuleList()
+        for n in range(num_hidden_layers):  # type: int
             if n == 0:
                 self.hidden_layers.append(torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size))
             else:
                 self.hidden_layers.append(torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size))
-        self.output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
+        self.output_layer: torch.nn.Module = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
         
-    def forward(self, input_layer) -> torch.nn.Module:
-        final_hidden_layer = self._apply_hidden_layers(input_layer)
-        output_layer = self._apply_output_layer(final_hidden_layer)
-        return output_layer
+    def forward(self, tensor_at_input_layer: torch.Tensor) -> torch.Tensor:
+        tensor_at_final_hidden_layer: torch.Tensor = self._apply_hidden_layers(tensor_at_input_layer)
+        tensor_at_output_layer: torch.Tensor = self._apply_output_layer(tensor_at_final_hidden_layer)
+        return tensor_at_output_layer
 
-    def _apply_hidden_layers(self, input_layer) -> torch.nn.Module:
-        previous_layer = input_layer
+    def _apply_hidden_layers(self, tensor_at_input_layer: torch.Tensor) -> torch.Tensor:
+        tensor_at_previous_layer: torch.nn.Module = tensor_at_input_layer
 
-        for hidden in self.hidden_layers:
-            current_layer = relu(hidden(previous_layer))
-            previous_layer = current_layer
+        for hidden in self.hidden_layers:  # type: torch.nn.Module
+            tensor_at_current_layer: torch.Tensor = relu(hidden(tensor_at_previous_layer))
+            tensor_at_previous_layer = tensor_at_current_layer
 
-        return current_layer
+        return tensor_at_current_layer
 
-    def _apply_output_layer(self, hidden_layer) -> torch.nn.Module:
-        return sigmoid(self.output_layer(hidden_layer))
+    def _apply_output_layer(self, tensor_at_hidden_layer: torch.Tensor) -> torch.Tensor:
+        return sigmoid(self.output_layer(tensor_at_hidden_layer))
 
 #    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
 #
@@ -141,7 +145,7 @@ class Autoencoder(torch.nn.Module):
 #        results = dict()
 #        batch_info: BatchInfo = data.get_batch_info(max_items_per_batch)
 
-    def run_t2v(self, data, max_items_per_batch: int, cuda_device: int):
+    def run_t2v(self, data, max_items_per_batch: int, cuda_device: int) -> Dict[str, torch.Tensor]:
 
         self.eval()
 
@@ -150,18 +154,22 @@ class Autoencoder(torch.nn.Module):
         else:
             self.cuda(device=cuda_device)
 
-        results = dict()
+        results: Dict[str, torch.Tensor] = dict()
         batch_info: BatchInfo = data.get_batch_info(max_items_per_batch)
-        for batch_number, data_on_device in enumerate(data.get_batches(items_per_batch=max_items_per_batch,
-                                                                       device_number=cuda_device)):
+        for numbered_batch in data.get_batches(items_per_batch=max_items_per_batch,
+                                               device_number=cuda_device
+                                               ):  # type: Tuple[int, torch.Tensor]
 
-            batch_of_results = self._apply_hidden_layers(data_on_device)
+            batch_number: int = numbered_batch[0]
+            data_on_device: torch.Tensor = numbered_batch[1]
 
-            morphemes = batch_info[batch_number]
-            number_of_results = batch_of_results.shape[0]
-            for n in range(min(number_of_results, len(morphemes))):
-                morpheme = morphemes[n]
-                tensor = batch_of_results[n]
+            batch_of_results: torch.Tensor = self._apply_hidden_layers(data_on_device)
+
+            morphemes: List[str] = batch_info[batch_number]
+            number_of_results: int = batch_of_results.shape[0]
+            for n in range(min(number_of_results, len(morphemes))):  # type: int
+                morpheme: str = morphemes[n]
+                tensor: torch.Tensor = batch_of_results[n]
                 results[morpheme] = tensor
 
         return results
@@ -169,13 +177,14 @@ class Autoencoder(torch.nn.Module):
     def run_training(
             self,
             data: Tensors,
-            criterion,
-            optimizer,
+            criterion: torch.nn.Module,
+            optimizer: torch.optim.Optimizer,
             num_epochs: int,
             max_items_per_batch: int,
             save_frequency: int,
             cuda_device: int
-    ):
+    ) -> None:
+
         self.train()
 
         if cuda_device < 0:
@@ -183,22 +192,26 @@ class Autoencoder(torch.nn.Module):
         else:
             self.cuda(device=cuda_device)
         
-        for epoch in range(1, num_epochs+1):
+        for epoch in range(1, num_epochs+1):  # type: int
             optimizer.zero_grad()
 
-            total_loss = 0
+            total_loss: float = 0.0
             
-            for data_on_device in data.get_batches(items_per_batch=max_items_per_batch, device_number=cuda_device):
+            for numbered_batch in data.get_batches(items_per_batch=max_items_per_batch,
+                                                   device_number=cuda_device
+                                                   ):  # type: Tuple[int, torch.Tensor]
 
-                prediction = self(data_on_device)
+                #  batch_number: int = numbered_batch[0]
+                data_on_device: torch.Tensor = numbered_batch[1]
+
+                prediction: torch.Tensor = self(data_on_device)
 
                 # Compute Loss
-                loss = criterion(prediction.squeeze(), data_on_device)
+                loss: torch.Tensor = criterion(prediction.squeeze(), data_on_device)
                 total_loss += loss.item()
 
                 loss.backward()
 
-                
             logging.info(f"Epoch {str(epoch).zfill(len(str(num_epochs)))}\ttrain loss: {loss.item()}")
             
             if epoch % save_frequency == 0 or epoch == num_epochs:
@@ -218,7 +231,7 @@ def program_arguments():
     arg_parser.add_argument(
         "--epochs",
         type=int,
-         default=200,
+        default=200,
         help="Number of epochs to run during training.",
     )
     arg_parser.add_argument(
@@ -313,12 +326,12 @@ def main():
 
         data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
 
-        model = Autoencoder(input_dimension_size=data.input_dimension_size,
-                            hidden_layer_size=args.hidden_layer_size,
-                            num_hidden_layers=args.hidden_layers)
+        model: Autoencoder = Autoencoder(input_dimension_size=data.input_dimension_size,
+                                         hidden_layer_size=args.hidden_layer_size,
+                                         num_hidden_layers=args.hidden_layers)
 
-        criterion = torch.nn.MSELoss()
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
+        criterion: torch.nn.Module = torch.nn.MSELoss()
+        optimizer: torch.optim.Optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
         model.run_training(data,
                            criterion,
@@ -340,9 +353,9 @@ def main():
 
         data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
 
-        model = torch.load(args.model_file)
+        model: Autoencoder = torch.load(args.model_file)
 
-        results = model.run_t2v(data, args.batch_size, args.cuda_device)
+        results: Dict[str, torch.Tensor] = model.run_t2v(data, args.batch_size, args.cuda_device)
 
         with gzip.open(args.output_file, "wb") as output:
             logging.info(f"Saving gzipped dictionary of morphemes to vectors in {args.output_file}")
