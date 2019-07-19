@@ -38,19 +38,19 @@ class BatchInfo:
 
     def __init__(self, morphemes: Iterable[str], items_per_batch: int):
         sizes_dict: Dict[int, List[str]] = dict()
-        for morpheme in morphemes:
-            length:int = len(morpheme)
+        for morpheme in morphemes:  # type: str
+            length = len(morpheme)  # type: int
             if length not in sizes_dict:
                 sizes_dict[length] = list()
             sizes_dict[length].append(morpheme)
 
         self._batches: List[List[str]] = list()
         current_batch: List[str] = list()
-        for length in sorted(sizes_dict.keys()):  # type: int
-            for morpheme in sizes_dict[length]:   # type: str
+        for length in sorted(sizes_dict.keys()):
+            for morpheme in sizes_dict[length]: 
                 if len(current_batch) == items_per_batch:
                     self._batches.append(current_batch)
-                    current_batch: List[str] = list()
+                    current_batch = list()
                 current_batch.append(morpheme)
         if len(current_batch) > 0:
             self._batches.append(current_batch)
@@ -89,7 +89,7 @@ class Tensors:
         batch_info: BatchInfo = self.get_batch_info(items_per_batch)
         batch_number: int = -1
         for batch_of_morphemes in batch_info:  # type: List[str]
-            batch_number: int = batch_number + 1
+            batch_number = batch_number + 1
             tensor: torch.Tensor = torch.zeros(items_per_batch, self.input_dimension_size)
             for numbered_morpheme in enumerate(batch_of_morphemes):  # type: Tuple[int, str]
                 n: int = numbered_morpheme[0]
