@@ -5,7 +5,7 @@ import torch                           # type: ignore
 import torch.nn                        # type: ignore
 from torch import sigmoid              # type: ignore
 from torch.nn.functional import relu   # type: ignore
-from typing import Dict, List, Callable, Set, Mapping, Iterable
+from typing import Dict, List, Callable, Set, Mapping, Iterable, Iterator
 import sys
 
 """Implements an autoencoder to embed Tensor Product Representation tensors into smaller vectors.
@@ -34,16 +34,16 @@ if sys.version_info < (3, 7):
 class BatchInfo:
     """Store information necessary to identify a morpheme given a batch number and an index within that batch."""
 
-    def __init__(self, morphemes, items_per_batch):
-        sizes_dict = dict()
+    def __init__(self, morphemes: Iterable[str], items_per_batch: int):
+        sizes_dict: Dict[int, List[str]] = dict()
         for morpheme in morphemes:
-            length = len(morpheme)
+            length:int = len(morpheme)
             if length not in sizes_dict:
                 sizes_dict[length] = list()
             sizes_dict[length].append(morpheme)
 
-        self._batches = list()
-        current_batch = list()
+        self._batches: List[List[str]] = list()
+        current_batch: List[str] = list()
         for length in sorted(sizes_dict.keys()):
             for morpheme in sizes_dict[length]:
                 if len(current_batch) == items_per_batch:
@@ -53,10 +53,10 @@ class BatchInfo:
         if len(current_batch) > 0:
             self._batches.append(current_batch)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> List[str]:
         return self._batches[index]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[List[str]]:
         return iter(self._batches)
 
 
@@ -108,7 +108,7 @@ class Autoencoder(torch.nn.Module):
                 self.hidden_layers.append(torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size))
         self.output_layer = torch.nn.Linear(self.hidden_layer_size, self.input_dimension_size)
         
-    def forward(self, input_layer):
+    def forward(self, input_layer) -> torch.nn.Module:
         final_hidden_layer = self._apply_hidden_layers(input_layer)
         output_layer = self._apply_output_layer(final_hidden_layer)
         return output_layer
@@ -125,17 +125,17 @@ class Autoencoder(torch.nn.Module):
     def _apply_output_layer(self, hidden_layer) -> torch.nn.Module:
         return sigmoid(self.output_layer(hidden_layer))
 
-    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
-
-        self.eval()
-
-        if cuda_device < 0:
-            self.cpu()
-        else:
-            self.cuda(device=cuda_device)
-
-        results = dict()
-        batch_info: BatchInfo = data.get_batch_info(max_items_per_batch)
+#    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
+#
+#        self.eval()
+#
+#        if cuda_device < 0:
+#            self.cpu()
+#        else:
+#            self.cuda(device=cuda_device)
+#
+#        results = dict()
+#        batch_info: BatchInfo = data.get_batch_info(max_items_per_batch)
 
     def run_t2v(self, data, max_items_per_batch: int, cuda_device: int):
 
