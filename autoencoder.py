@@ -1,11 +1,12 @@
 #!/usr/bin/env python3.7
 
+from iiksiin import Alphabet
 import logging
 import torch                           # type: ignore
 import torch.nn                        # type: ignore
 from torch import sigmoid              # type: ignore
 from torch.nn.functional import relu   # type: ignore
-from typing import Dict, List, Callable, Set, Mapping, Iterable, Iterator
+from typing import Mapping, Dict, List, Tuple, Iterable, Iterator
 import sys
 
 """Implements an autoencoder to embed Tensor Product Representation tensors into smaller vectors.
@@ -62,7 +63,7 @@ class BatchInfo:
 
 class Tensors:
 
-    def __init__(self, tensor_dict, alphabet):
+    def __init__(self, tensor_dict: Mapping[str, torch.Tensor], alphabet: Alphabet):
         self.tensor_dict = tensor_dict
         self.alphabet = alphabet
         self.morph_size = next(iter(self.tensor_dict.values())).numel()
@@ -73,7 +74,10 @@ class Tensors:
         import pickle
         import gzip
         with gzip.open(tensor_file) as f:
-            tensor_dict, alphabet = pickle.load(f, encoding='utf8')
+            result: Tuple[Dict[str, torch.Tensor], Alphabet] = pickle.load(f, encoding='utf8')
+            tensor_dict: Dict[str, torch.Tensor] = result[0]
+            alphabet: Alphabet = result[1]
+            # (tensor_dict, alphabet:Alphabet) = pickle.load(f, encoding='utf8')
             return Tensors(tensor_dict, alphabet)
 
     def get_batch_info(self, items_per_batch) -> BatchInfo:
