@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.7
 
-from iiksiin import Alphabet
+from iiksiin import Alphabet, TensorProductRepresentation
 import logging
 import torch                           # type: ignore
 import torch.nn                        # type: ignore
@@ -342,7 +342,22 @@ def main():
                            args.cuda_device)
 
         torch.save(model, args.output_file)
-        
+
+    elif args.mode == "t2s" and args.tensor_file:
+
+        import gzip
+        import pickle
+
+        logging.info(f"Extracting surface strings from tensors in {args.tensor_file}")
+
+        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
+        for key_value_tuple in data.tensor_dict.items():  # type: Tuple[str, torch.Tensor]
+            expected: str = key_value_tuple[0]
+            tensor: torch.Tensor = key_value_tuple[1]
+            actual: str = TensorProductRepresentation.extract_surface_form(alphabet=data.alphabet,
+                                                                           morpheme_tensor=tensor)
+            print(f"{expected==actual}\t{expected}\t{actual}")
+
     elif args.mode == "t2v" and args.model_file and args.tensor_file:
 
         import gzip

@@ -155,6 +155,19 @@ class Alphabet:
         self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
         self.name = name
         self.oov = 0
+        self._vector: List[Vector] = list()
+        for i in range(len(self.dimension)):
+            self._vector.append(OneHotVector(i, self.dimension))
+        # self.tensor = torch.zeros(len(self.dimension), len(self.dimension))
+        # for i in range(len(self.dimension)):
+        #    self.tensor[i][i] = 1
+
+    def get_vector(self, symbol: str) -> "Vector":
+        index: int = self[symbol]
+        return self._vector[index]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._symbols.keys())
 
     def __getitem__(self, symbol: str) -> int:
         if symbol in self._symbols:
@@ -222,16 +235,70 @@ class TensorProductRepresentation:
     def __init__(
         self,
         alphabet: Alphabet,
-        characters_dimension: Dimension,
-        morphemes_dimension: Dimension,
+        characters_dimension: Dimension
+#        morphemes_dimension: Dimension,
     ):
         self.alphabet: Alphabet = alphabet
         self.character_roles: Roles = Roles(
             characters_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
         )
-        self.morpheme_roles: Roles = Roles(
-            morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
-        )
+#        self.morpheme_roles: Roles = Roles(
+#            morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
+#        )
+
+    @staticmethod
+    def extract_surface_form(alphabet: Mapping[str, int],
+                             morpheme_tensor: torch.Tensor,
+                             max_chars_per_morpheme: int = 20) -> str:
+
+        import math
+
+        result: List[str] = list()
+
+        for character_position in range(max_chars_per_morpheme):  # type: int
+            character_position_role = torch.zeros(max_chars_per_morpheme)
+            character_position_role[character_position] = 1.0
+        # for character_position in character_roles:  # Type: Vector
+
+            equation_in_einstein_notation: str = "...j, j -> ..."  #
+            """This means that the final dimension of data and the only dimension of role are the same size.
+               We will be summing over that dimension."""
+
+            vector_for_current_character: torch.Tensor = torch.einsum(
+                equation_in_einstein_notation, [morpheme_tensor, character_position_role]
+            )
+           # print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
+           # print(f"character_position_role.shape is {character_position_role.shape}")
+           # print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
+
+            best_character = None
+            best_distance = float("inf")
+
+            for character in alphabet:
+                i: int = alphabet[character]
+                gold_character_vector = torch.zeros(vector_for_current_character.nelement())
+                gold_character_vector[i] = 1.0
+                #print(f"gold_character_vector.shape is {gold_character_vector.shape}")
+                # print(gold_character_vector.shape)
+                # print(vector_for_current_character.shape)
+                # character_vector: Vector = alphabet.get_vector(character)
+                #distance = gold_character_vector.dot(vector_for_current_character).item()
+                summation: float = 0.0
+                for x in range(vector_for_current_character.nelement()):
+                    summation += (gold_character_vector[x] - vector_for_current_character[x])**2
+                distance = math.sqrt(summation)
+
+                if distance < best_distance:
+                    best_character = character
+                    best_distance = distance
+                    #print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
+
+            if best_character == Alphabet.END_OF_MORPHEME:
+                break
+            else:
+                result.append(best_character)
+
+        return "".join(result)
 
     def process_morpheme(self, morpheme: Iterable[str]) -> Tensor:
         return TensorProductRepresentation.process_characters_in_morpheme(
@@ -258,7 +325,7 @@ class TensorProductRepresentation:
         )
 
         for index, char in enumerate(characters):
-            char_vector: Vector = OneHotVector(alphabet[char], alphabet.dimension)
+            char_vector: Vector = alphabet.get_vector(char)  # OneHotVector(alphabet[char], alphabet.dimension)
             role_vector: Vector = character_roles[index]
 
             result += char_vector.tensor_product(role_vector)
