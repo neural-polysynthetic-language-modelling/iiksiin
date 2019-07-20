@@ -121,7 +121,7 @@ class Autoencoder(torch.nn.Module):
         tensor_at_output_layer: torch.Tensor = self._apply_output_layer(tensor_at_final_hidden_layer)
         return tensor_at_output_layer
 
-    def _apply_hidden_layers(self, tensor_at_input_layer: torch.Tensor) -> torch.Tensor:
+    def _apply_hidden_layers(self, tensor_at_input_layer: torch.Tensor, cuda_device = 1) -> torch.Tensor:
         tensor_at_previous_layer: torch.nn.Module = tensor_at_input_layer
 
         for hidden in self.hidden_layers:  # type: torch.nn.Module
@@ -130,8 +130,8 @@ class Autoencoder(torch.nn.Module):
 
         return tensor_at_current_layer
 
-    def _apply_output_layer(self, tensor_at_hidden_layer: torch.Tensor) -> torch.Tensor:
-        return sigmoid(self.output_layer(tensor_at_hidden_layer))
+    def _apply_output_layer(self, tensor_at_hidden_layer: torch.Tensor, cuda_device: int = 1) -> torch.Tensor:
+        return sigmoid(self.output_layer(tensor_at_hidden_layer.cuda(device=cuda_device)))
 
 #    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
 #
@@ -247,6 +247,12 @@ def program_arguments():
              "In training mode and t2v mode, this file will be used as input.",
     )
     arg_parser.add_argument(
+        "--vector_file",
+        type=str,
+        help="Path to pickle file containing dictionary of morpheme vectors. " +
+             "In v2t and v2s mode, this file will be used as input.",
+    )
+    arg_parser.add_argument(
         "--hidden_layer_size",
         type=int,
         default="50",
@@ -358,13 +364,105 @@ def main():
                                                                            morpheme_tensor=tensor)
             print(f"{expected==actual}\t{expected}\t{actual}")
 
+
+    elif args.mode == "tv2s" and args.tensor_file:
+
+        import gzip
+        import pickle
+        
+        logging.info(f"Constructing vectors from tensors in {args.tensor_file} "
+                     f"using previously trained model {args.model_file}")
+
+        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
+
+        model: Autoencoder = torch.load(args.model_file)
+
+        results: Dict[str, torch.Tensor] = model.run_t2v(data, args.batch_size, args.cuda_device)
+
+
+        for key_value_tuple in results.items():
+#            print(key_value_tuple)
+            expected: str = key_value_tuple[0]
+            print(f"Expected string is \"{expected}\":")
+            for c in expected:
+                print(Alphabet.unicode_info(c))
+            tensor_shape = data.tensor_dict[expected].shape
+
+#            print(tensor_dict[expected].shape)
+#            sys.exit(0)
+            vector: torch.Tensor = key_value_tuple[1].cpu()
+            
+            if args.cuda_device < 0:
+                tensor: torch.Tensor = model._apply_output_layer(vector).reshape(tensor_shape).cpu()
+            else:
+                tensor: torch.Tensor = model._apply_output_layer(vector).reshape(tensor_shape).cuda(device=args.cuda_device)
+
+
+#            print(f"Actual tensor:\n{tensor}")
+                
+            actual: str = TensorProductRepresentation.extract_surface_form(alphabet=data.alphabet,
+                                                                           morpheme_tensor=tensor)
+
+            print(f"Expected {expected} tensor:\n{data.tensor_dict[expected]}\n{data.tensor_dict[expected].nonzero()}\tActual {tensor}")            
+            print(f"{expected==actual}\t{expected}\t{actual}")
+        
+            
+    elif args.mode == "v2s" and args.tensor_file:
+
+        import gzip
+        import pickle
+
+        logging.info(f"Constructing strings from previously autoencoded tensors in {args.tensor_file} " +
+                     f"using previously trained model {args.model_file}")
+
+        
+        with gzip.open(args.tensor_file) as f:
+            result: Tuple[Dict[str, torch.Tensor], Dict[str, int]] = pickle.load(f, encoding='utf8')
+            tensor_dict: Dict[str, torch.Tensor] = result[0]
+            alphabet: Dict[str, int] = result[1]
+
+#            for key, value in tensor_dict.items():
+#                print(f"String \"{key}\"\t{value}\t{value.nonzero()}")
+#            exit()
+            
+        with gzip.open(args.vector_file) as f:
+            vectors: Dict[str, torch.Tensor] = pickle.load(f, encoding='utf8')
+#            tensor_dict: Dict[str, torch.Tensor] = result[0]
+#            alphabet: Dict[str, int] = result[1]
+
+        model: Autoencoder = torch.load(args.model_file)
+
+        for key_value_tuple in vectors.items():
+#            print(key_value_tuple)
+            expected: str = key_value_tuple[0]
+            print(f"Expected string is \"{expected}\":")
+            for c in expected:
+                print(Alphabet.unicode_info(c))
+            tensor_shape = tensor_dict[expected].shape
+            print(f"Expected {expected} tensor:\n{tensor_dict[expected]}\n{tensor_dict[expected].nonzero()}")
+#            print(tensor_dict[expected].shape)
+#            sys.exit(0)
+            vector: torch.Tensor = key_value_tuple[1].cpu()
+            
+            if args.cuda_device < 0:
+                tensor: torch.Tensor = model._apply_output_layer(vector).reshape(tensor_shape).cpu()
+            else:
+                tensor: torch.Tensor = model._apply_output_layer(vector).reshape(tensor_shape).cuda(device=args.cuda_device)
+
+
+#            print(f"Actual tensor:\n{tensor}")
+                
+            actual: str = TensorProductRepresentation.extract_surface_form(alphabet=alphabet,
+                                                                           morpheme_tensor=tensor)
+#            print(f"{expected==actual}\t{expected}\t{actual}")
+        
     elif args.mode == "t2v" and args.model_file and args.tensor_file:
 
         import gzip
         import pickle
         
         logging.info(f"Constructing vectors from tensors in {args.tensor_file} "
-                     "using previously trained model {args.model_file}")
+                     f"using previously trained model {args.model_file}")
 
         data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
 

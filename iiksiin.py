@@ -256,7 +256,7 @@ class TensorProductRepresentation:
         result: List[str] = list()
 
         for character_position in range(max_chars_per_morpheme):  # type: int
-            character_position_role = torch.zeros(max_chars_per_morpheme)
+            character_position_role = torch.zeros(max_chars_per_morpheme).cpu()
             character_position_role[character_position] = 1.0
         # for character_position in character_roles:  # Type: Vector
 
@@ -264,19 +264,20 @@ class TensorProductRepresentation:
             """This means that the final dimension of data and the only dimension of role are the same size.
                We will be summing over that dimension."""
 
-            vector_for_current_character: torch.Tensor = torch.einsum(
-                equation_in_einstein_notation, [morpheme_tensor, character_position_role]
-            )
-           # print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
-           # print(f"character_position_role.shape is {character_position_role.shape}")
-           # print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
+#            print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
+#            print(f"character_position_role.shape is {character_position_role.shape}")
 
+            vector_for_current_character: torch.Tensor = torch.einsum(
+                equation_in_einstein_notation, [morpheme_tensor.cpu(), character_position_role.cpu()]
+            )
+#            print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
+#            print(f"vector for position {character_position}:\t{vector_for_current_character}")
             best_character = None
             best_distance = float("inf")
 
             for character in alphabet:
                 i: int = alphabet[character]
-                gold_character_vector = torch.zeros(vector_for_current_character.nelement())
+                gold_character_vector = torch.zeros(vector_for_current_character.nelement()).cpu()
                 gold_character_vector[i] = 1.0
                 #print(f"gold_character_vector.shape is {gold_character_vector.shape}")
                 # print(gold_character_vector.shape)
@@ -291,7 +292,7 @@ class TensorProductRepresentation:
                 if distance < best_distance:
                     best_character = character
                     best_distance = distance
-                    #print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
+                  #  print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
 
             if best_character == Alphabet.END_OF_MORPHEME:
                 break
