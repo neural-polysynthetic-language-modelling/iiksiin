@@ -303,7 +303,7 @@ class TensorProductRepresentation:
                 result.append("\u2404")
             else:
                 result.append(best_character)
-            print(f"best character at position {character_position} is {Alphabet.unicode_info(best_character)}", file=sys.stderr)
+            #print(f"best character at position {character_position} is {Alphabet.unicode_info(best_character)}", file=sys.stderr)
 
         return "".join(result)
 
@@ -471,7 +471,7 @@ def main(
                 for word in line.strip().split():
                     if word not in result:
                         for character in grapheme.graphemes(word):
-                            if character not in alphabet_set:
+                            if character not in alphabet_set and character != morpheme_delimiter and character != end_of_morpheme_symbol:
                                 print(
                                     f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}",
                                     file=sys.stderr,

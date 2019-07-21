@@ -194,7 +194,7 @@ class Autoencoder(torch.nn.Module):
 
             batch_number: int = numbered_batch[0]
             data_on_device: torch.Tensor = numbered_batch[1]
-
+            print(f"Batch number {batch_number}...")
             batch_of_results: torch.Tensor = self._apply_hidden_layers(data_on_device)
 
             morphemes: List[str] = batch_info[batch_number]
@@ -435,7 +435,7 @@ def main():
             actual: str = TensorProductRepresentation.extract_surface_form(
                 alphabet=data.alphabet, morpheme_tensor=tensor
             )
-            print(f"{expected==actual}\t{expected}\t{actual}")
+#            print(f"{expected==actual}\t{expected}\t{actual}")
 
     elif args.mode == "tv2s" and args.tensor_file:
 
@@ -458,9 +458,9 @@ def main():
         for key_value_tuple in results.items():
             #            print(key_value_tuple)
             expected: str = key_value_tuple[0]
-            print(f'Expected string is "{expected}":')
-            for c in expected:
-                print(Alphabet.unicode_info(c))
+#            print(f'Expected string is "{expected}":')
+#            for c in expected:
+#                print(Alphabet.unicode_info(c))
             tensor_shape = data.tensor_dict[expected].shape
 
             #            print(tensor_dict[expected].shape)
@@ -482,9 +482,9 @@ def main():
                 alphabet=data.alphabet, morpheme_tensor=tensor
             )
 
-            print(
-                f"Expected {expected} tensor:\n{data.tensor_dict[expected]}\n{data.tensor_dict[expected].nonzero()}\tActual {tensor}"
-            )
+#            print(
+#                f"Expected {expected} tensor:\n{data.tensor_dict[expected]}\n{data.tensor_dict[expected].nonzero()}\tActual {tensor}"
+#            )
             actual_visualized=actual.replace('\u0000','\u2400').replace('\u0004','\u2404')
             print(f"{expected==actual}\t{expected}\t\"{actual_visualized}\"\t{len(actual)}")
 
@@ -519,13 +519,13 @@ def main():
         for key_value_tuple in vectors.items():
             #            print(key_value_tuple)
             expected: str = key_value_tuple[0]
-            print(f'Expected string is "{expected}":')
-            for c in expected:
-                print(Alphabet.unicode_info(c))
+#            print(f'Expected string is "{expected}":')
+#            for c in expected:
+#                print(Alphabet.unicode_info(c))
             tensor_shape = tensor_dict[expected].shape
-            print(
-                f"Expected {expected} tensor:\n{tensor_dict[expected]}\n{tensor_dict[expected].nonzero()}"
-            )
+#            print(
+#                f"Expected {expected} tensor:\n{tensor_dict[expected]}\n{tensor_dict[expected].nonzero()}"
+#            )
             #            print(tensor_dict[expected].shape)
             #            sys.exit(0)
             vector: torch.Tensor = key_value_tuple[1].cpu()
