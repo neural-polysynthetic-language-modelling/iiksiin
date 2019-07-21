@@ -6,7 +6,8 @@ import torch  # type: ignore
 import torch.nn  # type: ignore
 import torch.optim  # type: ignore
 from torch import sigmoid  # type: ignore
-from torch.nn.functional import relu  # type: ignore
+from torch.nn.functional import relu, cross_entropy  # type: ignore
+#import torch.nn.modules  # type: ignore
 from typing import Mapping, Dict, List, Tuple, Iterable, Iterator
 import sys
 
@@ -122,14 +123,14 @@ class Autoencoder(torch.nn.Module):
         for n in range(num_hidden_layers):  # type: int
             if n == 0:
                 self.hidden_layers.append(
-                    torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size)
+                    torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size, bias=True)
                 )
             else:
                 self.hidden_layers.append(
-                    torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size)
+                    torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size, bias=True)
                 )
         self.output_layer: torch.nn.Module = torch.nn.Linear(
-            self.hidden_layer_size, self.input_dimension_size
+            self.hidden_layer_size, self.input_dimension_size, bias=True
         )
 
     def forward(self, tensor_at_input_layer: torch.Tensor) -> torch.Tensor:
@@ -147,7 +148,7 @@ class Autoencoder(torch.nn.Module):
         tensor_at_previous_layer: torch.nn.Module = tensor_at_input_layer
 
         for hidden in self.hidden_layers:  # type: torch.nn.Module
-            tensor_at_current_layer: torch.Tensor = relu(
+            tensor_at_current_layer: torch.Tensor =   relu(
                 hidden(tensor_at_previous_layer)
             )
             tensor_at_previous_layer = tensor_at_current_layer
@@ -157,9 +158,10 @@ class Autoencoder(torch.nn.Module):
     def _apply_output_layer(
         self, tensor_at_hidden_layer: torch.Tensor, cuda_device: int = 1
     ) -> torch.Tensor:
-        return sigmoid(
-            self.output_layer(tensor_at_hidden_layer.cuda(device=cuda_device))
-        )
+        #return 
+        #sigmoid(
+        return    self.output_layer(tensor_at_hidden_layer.cuda(device=cuda_device))
+        #)
 
     #    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
     #
@@ -340,29 +342,37 @@ def program_arguments():
     return arg_parser
 
 
-class UnbindingLoss(torch.nn.Module):
+class UnbindingLoss(torch.nn.modules.loss._Loss):
     def __init__(
         self,
+        alphabet: Mapping[str, int],
         weight=None,
         size_average=None,
         ignore_index=-100,
         reduce=None,
         reduction="mean",
     ):
-        super(UnbindingLoss, self).__init__(weight, size_average, reduce, reduction)
+        super().__init__(size_average=size_average, reduce=reduce, reduction=reduction)
+        # super(UnbindingLoss, self).__init__(weight, size_average, reduce, reduction)
         self.ignore_index = ignore_index
-
-    def forward(self, input, target, alphabet):
+        self.weight = weight
+        self.alphabet: Mapping[str, int] = alphabet
         alpha_tensor = []
-        for character in alphabet:
-            i = alphabet[character]
-            gold_character_vector = torch.zeros(vector_for_current_character.nelement())
+        for character in self.alphabet.keys():
+            i = self.alphabet[character]
+            gold_character_vector = torch.zeros(len(self.alphabet)+1)
             gold_character_vector[i] = 1.0
             alpha_tensor.append(gold_character_vector)
+        oov = torch.zeros(len(self.alphabet)+1)
+        oov[0] = 1.0
+        alpha_tensor.insert(0, oov)
         alpha_tensor = torch.stack(alpha_tensor)
-        distances = torch.einsum("cm,ca-> ma", input, target)
-        return F.cross_entropy(
-            input, target, weight=self.weight, ignore_index=self.ignore_index
+        self.register_buffer('alpha_tensor', alpha_tensor)
+
+    def forward(self, input, target):
+        distances = torch.einsum("bcm,ac-> bam", input.view(input.size(0), len(self.alphabet)+1, -1), self.alpha_tensor)
+        return cross_entropy(
+                distances, target.view(target.size(0), len(self.alphabet)+1, -1).argmax(dim=1), weight=self.weight, ignore_index=self.ignore_index
         )
 
 
@@ -392,8 +402,8 @@ def main():
             num_hidden_layers=args.hidden_layers,
         )
 
-        criterion: torch.nn.Module = UnbindingLoss
-        optimizer: torch.optim.Optimizer = torch.optim.SGD(
+        criterion: torch.nn.Module = UnbindingLoss(alphabet=data.alphabet).to(f'cuda:{args.cuda_device}')
+        optimizer: torch.optim.Optimizer = torch.optim.Adam(
             model.parameters(), lr=args.learning_rate
         )
 
@@ -475,7 +485,8 @@ def main():
             print(
                 f"Expected {expected} tensor:\n{data.tensor_dict[expected]}\n{data.tensor_dict[expected].nonzero()}\tActual {tensor}"
             )
-            print(f"{expected==actual}\t{expected}\t{actual}")
+            actual_visualized=actual.replace('\u0000','\u2400').replace('\u0004','\u2404')
+            print(f"{expected==actual}\t{expected}\t\"{actual_visualized}\"\t{len(actual)}")
 
     elif args.mode == "v2s" and args.tensor_file:
 

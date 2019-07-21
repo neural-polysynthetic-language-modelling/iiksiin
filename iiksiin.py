@@ -298,9 +298,12 @@ class TensorProductRepresentation:
                   #  print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
 
             if best_character == Alphabet.END_OF_MORPHEME:
-                break
+                result.append("\u2400")
+            elif best_character == Alphabet.END_OF_TRANSMISSION:
+                result.append("\u2404")
             else:
                 result.append(best_character)
+            print(f"best character at position {character_position} is {Alphabet.unicode_info(best_character)}", file=sys.stderr)
 
         return "".join(result)
 
@@ -419,14 +422,16 @@ def main(
             with open(input_file) as input_source:
                 for line in input_source:
                     for character in grapheme.graphemes(line.strip()):
-                        alphabet_set.add(character)
+                        category = unicodedata.category(character)
+                        if category[0] != "Z" and  category[0] != "C" and character != morpheme_delimiter and character != end_of_morpheme_symbol:
+                            alphabet_set.add(character)
 
     alphabet_set.add(end_of_morpheme_symbol)
 
     for symbol in sorted(alphabet_set):
         for character in symbol:
             category = unicodedata.category(character)
-            if category[0] == "Z" and character != " ":
+            if category[0] == "Z": # and character != " ":
                 print(
                     f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}",
                     file=sys.stderr,
