@@ -340,7 +340,7 @@ def program_arguments():
     return arg_parser
 
 
-class UnbindingLoss(nn.Module):
+class UnbindingLoss(torch.nn.Module):
     def __init__(
         self,
         weight=None,
