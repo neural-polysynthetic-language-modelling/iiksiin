@@ -474,11 +474,14 @@ def main(
 
                         morphemes = word.split(morpheme_delimiter)
                         for morpheme in morphemes:
-                            try:
-                                tensor: Tensor = tpr.process_morpheme(morpheme)
-                                result[morpheme] = tensor.data
-                            except IndexError:
-                                print(f"WARNING - unable to process morpheme {morpheme} of {word}", file=sys.stderr)
+                            if len(morpheme) > 0:
+                                try:
+                                    tensor: Tensor = tpr.process_morpheme(morpheme)
+                                    result[morpheme] = tensor.data
+                                except IndexError:
+                                    print(f"WARNING - unable to process morpheme {morpheme} of {word}", file=sys.stderr)
+                            else:
+                                print(f"WARNING - skipping morpheme of length 0 in word {word}", file=sys.stderr)
 
             print(f"Writing binary file to disk at {output}...", file=sys.stderr)
             pickle.dump((result, alphabet._symbols), output)
