@@ -226,6 +226,9 @@ class Roles:
     def __iter__(self) -> Iterable[Vector]:
         return iter(self._one_hot_role_vectors)
 
+    def __len__(self) -> int:
+        return len(self._one_hot_role_vectors)
+    
     @staticmethod
     def get_one_hot_role_vectors(dimension: Dimension) -> List[Vector]:
         return [OneHotVector(index, dimension) for index in range(len(dimension))]
