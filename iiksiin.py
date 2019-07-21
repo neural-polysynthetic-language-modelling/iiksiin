@@ -454,8 +454,7 @@ def main(
 
             tpr: TensorProductRepresentation = TensorProductRepresentation(
                 alphabet=alphabet,
-                characters_dimension=characters_dimension,
-                morphemes_dimension=morphemes_dimension,
+                characters_dimension=characters_dimension
             )
 
             result: Dict[str, torch.Tensor] = {}
