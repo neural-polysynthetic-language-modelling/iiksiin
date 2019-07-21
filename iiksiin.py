@@ -105,7 +105,7 @@ class Tensor:
             *resulting_dimensions
         )  # Using * to convert list to varargs
 
-        equation_in_einstein_notation: str = "...j, k -> ...jk"
+        equation_in_einstein_notation: str = "...j,k -> ...jk"
         torch_tensor: torch.Tensor = torch.einsum(
             equation_in_einstein_notation, [self.data, other.data]
         )
@@ -260,7 +260,7 @@ class TensorProductRepresentation:
             character_position_role[character_position] = 1.0
         # for character_position in character_roles:  # Type: Vector
 
-            equation_in_einstein_notation: str = "...j, j -> ..."  #
+            equation_in_einstein_notation: str = "...j,j -> ..."  #
             """This means that the final dimension of data and the only dimension of role are the same size.
                We will be summing over that dimension."""
 
