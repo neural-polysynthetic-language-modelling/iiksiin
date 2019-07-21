@@ -194,7 +194,7 @@ class Autoencoder(torch.nn.Module):
 
             batch_number: int = numbered_batch[0]
             data_on_device: torch.Tensor = numbered_batch[1]
-            print(f"Batch number {batch_number}...")
+            logging.info(f"Batch number {batch_number}...")
             batch_of_results: torch.Tensor = self._apply_hidden_layers(data_on_device)
 
             morphemes: List[str] = batch_info[batch_number]
@@ -485,8 +485,13 @@ def main():
 #            print(
 #                f"Expected {expected} tensor:\n{data.tensor_dict[expected]}\n{data.tensor_dict[expected].nonzero()}\tActual {tensor}"
 #            )
-            actual_visualized=actual.replace('\u0000','\u2400').replace('\u0004','\u2404')
-            print(f"{expected==actual}\t{expected}\t\"{actual_visualized}\"\t{len(actual)}")
+
+#            actual = actual.replace(Alphabet.END_OF_MORPHEME,'')
+#            actual = actual.replace(Alphabet.END_OF_TRANSMISSION, '')
+            report=f"{expected==actual}\t{expected}\t{actual}"
+            logging.info(report)
+            print(report)
+            sys.stdout.flush()
 
     elif args.mode == "v2s" and args.tensor_file:
 

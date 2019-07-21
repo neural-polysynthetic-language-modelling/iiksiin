@@ -298,9 +298,10 @@ class TensorProductRepresentation:
                   #  print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
 
             if best_character == Alphabet.END_OF_MORPHEME:
-                result.append("\u2400")
-            elif best_character == Alphabet.END_OF_TRANSMISSION:
-                result.append("\u2404")
+#                result.append("\u2400")
+                break
+#            elif best_character == Alphabet.END_OF_TRANSMISSION:
+#                result.append("\u2404")
             else:
                 result.append(best_character)
             #print(f"best character at position {character_position} is {Alphabet.unicode_info(best_character)}", file=sys.stderr)
