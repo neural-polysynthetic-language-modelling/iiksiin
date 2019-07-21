@@ -325,10 +325,16 @@ class TensorProductRepresentation:
             shape=Shape(alphabet.dimension, character_roles.dimension)
         )
 
+        # Process characters in the actual morpheme
         for index, char in enumerate(characters):
             char_vector: Vector = alphabet.get_vector(char)  # OneHotVector(alphabet[char], alphabet.dimension)
             role_vector: Vector = character_roles[index]
+            result += char_vector.tensor_product(role_vector)
 
+        # Treat anything after the morpheme as being filled by Alphabet.END_OF_TRANSMISSION
+        char_vector = alphabet.get_vector(Alphabet.END_OF_TRANSMISSION)
+        for index in range(index+1, len(character_roles)):
+            role_vector: Vector = character_roles[index]
             result += char_vector.tensor_product(role_vector)
 
         return result
