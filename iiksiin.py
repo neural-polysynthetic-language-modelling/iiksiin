@@ -1,5 +1,6 @@
 import grapheme  # type: ignore
 import gzip
+import logging
 import torch     # type: ignore
 import sys
 from typing import Dict, List, Callable, Tuple, Set, Mapping, Iterable, Iterator
@@ -402,23 +403,17 @@ def main(
                         alphabet_set.add(character)
 
         except OSError as err:
-            print(
-                f"ERROR - failed to read alphabet file {alphabet_file}:\t{err}",
-                file=sys.stderr,
-            )
+            logging.error(f"ERROR - failed to read alphabet file {alphabet_file}:\t{err}")
             sys.exit(-1)
 
     if (
         len(alphabet_set) == 0 or not alphabet_file
     ):  # Attempt to read alphabet symbols from input file
         if input_file == "-":
-            print(
-                "ERROR - When reading from standard input, an alphabet file must be provided.",
-                file=sys.stderr,
-            )
+            logging.error("ERROR - When reading from standard input, an alphabet file must be provided.")
             sys.exit(-2)
         else:
-            print(f"Reading alphabet from input file {input_file}...", file=sys.stderr)
+            logging.info(f"Reading alphabet from input file {input_file}...")
 
             with open(input_file) as input_source:
                 for line in input_source:
@@ -433,21 +428,16 @@ def main(
         for character in symbol:
             category = unicodedata.category(character)
             if category[0] == "Z": # and character != " ":
-                print(
-                    f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}",
-                    file=sys.stderr,
-                )
+                logging.warning(f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}")
+
             elif (
                 category[0] == "C"
                 and character != morpheme_delimiter
                 and character != end_of_morpheme_symbol
             ):
-                print(
-                    f"WARNING - alphabet contains control character:\t{Alphabet.unicode_info(symbol)}",
-                    file=sys.stderr,
-                )
+                logging.warning(f"WARNING - alphabet contains control character:\t{Alphabet.unicode_info(symbol)}")
 
-    print(f"Symbols in alphabet: {len(alphabet_set)}", file=sys.stderr)
+    logging.info(f"Symbols in alphabet: {len(alphabet_set)}")
     if verbose > 0:
         print("-----------------------", file=sys.stderr)
         for symbol in sorted(alphabet_set):
@@ -467,32 +457,36 @@ def main(
             )
 
             result: Dict[str, torch.Tensor] = {}
+            skipped_morphemes: Set[str] = set()
             for number, line in enumerate(input_source):
-                print(f"Processing line {number}\t{line.strip()}", file=sys.stderr)
+                logging.debug(f"Processing line {number}\t{line.strip()}")
                 for word in line.strip().split():
                     if word not in result:
                         for character in grapheme.graphemes(word):
                             if character not in alphabet_set and character != morpheme_delimiter and character != end_of_morpheme_symbol:
-                                print(
-                                    f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}",
-                                    file=sys.stderr,
-                                )
+                                logging.warning(f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}")
 
                         morphemes = word.split(morpheme_delimiter)
                         for morpheme in morphemes:
-                            if len(morpheme) > 0:
+                            if len(morpheme) == 0:
+                                logging.debug(f"Line {number} - skipping morpheme of length 0 in word {word}")
+                            elif len(morpheme) == max_characters:
+                                logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} equals max length {max_characters}, and there is no space to insert the required end of morpheme symbol")
+                            elif len(morpheme) > max_characters:
+                                logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} exceeds max length {max_characters}")
+                            else:
                                 try:
                                     tensor: Tensor = tpr.process_morpheme(morpheme)
                                     result[morpheme] = tensor.data
                                 except IndexError:
-                                    print(f"WARNING - unable to process morpheme {morpheme} of {word}", file=sys.stderr)
-                            else:
-                                print(f"WARNING - skipping morpheme of length 0 in word {word}", file=sys.stderr)
+                                    logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}")
+                                    skipped_morphemes.add(morpheme)
 
-            print(f"Writing binary file to disk at {output}...", file=sys.stderr)
+            logging.info(f"Writing binary file containing {len(result)} morphemes to disk at {output}...")
             pickle.dump((result, alphabet._symbols), output)
-            print(f"...done writing binary file to disk at {output}", file=sys.stderr)
+            logging.info(f"...done writing binary file to disk at {output}", file=sys.stderr)
 
+            logging.info(f"Failed to process {len(skipped_morphemes)} morphemes:\n"+"\n".join(skipped_morphemes))
 
 if __name__ == "__main__":
 

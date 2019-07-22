@@ -71,6 +71,13 @@ class Tensors:
             -1
         ).shape[0]
 
+    def shape(self):
+#        print(type(self.tensor_dict))
+#        print(type(self.tensor_dict.values()))
+#        print(type(iter(self.tensor_dict.values())))
+#        print(type(next(iter(self.tensor_dict.values()))))
+        return next(iter(self.tensor_dict.values())).shape
+
     @staticmethod
     def load_from_pickle_file(tensor_file: str) -> "Tensors":
         import pickle
@@ -202,7 +209,14 @@ class Autoencoder(torch.nn.Module):
             for n in range(min(number_of_results, len(morphemes))):  # type: int
                 morpheme: str = morphemes[n]
                 tensor: torch.Tensor = batch_of_results[n]
-                results[morpheme] = tensor
+                #print(tensor)
+                #print(tensor.shape)
+                #print(tensor.tolist())
+                #sys.exit(0)
+                results[morpheme] = tensor.tolist()
+                #print(results[morpheme])
+                #print(results[morpheme].shape)
+                #sys.exit(0)
 
         return results
 
@@ -498,59 +512,40 @@ def main():
         import gzip
         import pickle
 
-        logging.info(
-            f"Constructing strings from previously autoencoded tensors in {args.tensor_file} "
-            + f"using previously trained model {args.model_file}"
-        )
+        logging.info(f"Extracting tensor shape from {args.tensor_file}")
+        tensors = Tensors.load_from_pickle_file(args.tensor_file)
+        tensor_shape = tensors.shape()
 
-        with gzip.open(args.tensor_file) as f:
-            result: Tuple[Dict[str, torch.Tensor], Dict[str, int]] = pickle.load(
-                f, encoding="utf8"
-            )
-            tensor_dict: Dict[str, torch.Tensor] = result[0]
-            alphabet: Dict[str, int] = result[1]
+        logging.info(f"Loading vectors from {args.vector_file}")
+        with open(args.vector_file, "rb") as f:
+            vectors: Dict[str, List[float]] = pickle.load(f, encoding="utf8")
 
-        #            for key, value in tensor_dict.items():
-        #                print(f"String \"{key}\"\t{value}\t{value.nonzero()}")
-        #            exit()
-
-        with gzip.open(args.vector_file) as f:
-            vectors: Dict[str, torch.Tensor] = pickle.load(f, encoding="utf8")
-        #            tensor_dict: Dict[str, torch.Tensor] = result[0]
-        #            alphabet: Dict[str, int] = result[1]
-
+        logging.info(f"Loading previously trained autoencoder model from {args.model_file}")
         model: Autoencoder = torch.load(args.model_file)
+        
+        logging.info(f"Processing {len(vectors)} vectors through autoencoder output layer...")
+        status = 0
+        with open(args.output_file, "w") as output_file:
+            for key_value_tuple in vectors.items():
+                status += 1
+                expected: str = key_value_tuple[0]
+                vector: List[float] = key_value_tuple[1]
 
-        for key_value_tuple in vectors.items():
-            #            print(key_value_tuple)
-            expected: str = key_value_tuple[0]
-#            print(f'Expected string is "{expected}":')
-#            for c in expected:
-#                print(Alphabet.unicode_info(c))
-            tensor_shape = tensor_dict[expected].shape
-#            print(
-#                f"Expected {expected} tensor:\n{tensor_dict[expected]}\n{tensor_dict[expected].nonzero()}"
-#            )
-            #            print(tensor_dict[expected].shape)
-            #            sys.exit(0)
-            vector: torch.Tensor = key_value_tuple[1].cpu()
+                if args.cuda_device < 0:
+                    tensor: torch.Tensor = model._apply_output_layer(torch.tensor(vector)).reshape(
+                        tensor_shape
+                    ).cpu()
+                else:
+                    tensor: torch.Tensor = model._apply_output_layer(torch.tensor(vector)).reshape(
+                        tensor_shape
+                    ).cuda(device=args.cuda_device)
 
-            if args.cuda_device < 0:
-                tensor: torch.Tensor = model._apply_output_layer(vector).reshape(
-                    tensor_shape
-                ).cpu()
-            else:
-                tensor: torch.Tensor = model._apply_output_layer(vector).reshape(
-                    tensor_shape
-                ).cuda(device=args.cuda_device)
-
-            #            print(f"Actual tensor:\n{tensor}")
-
-            actual: str = TensorProductRepresentation.extract_surface_form(
-                alphabet=alphabet, morpheme_tensor=tensor
-            )
-    #            print(f"{expected==actual}\t{expected}\t{actual}")
-
+                actual: str = TensorProductRepresentation.extract_surface_form(
+                    alphabet=tensors.alphabet, morpheme_tensor=tensor
+                )
+                print(f"{expected==actual}\t{expected}\t{actual}", file=output_file)
+                logging.info(f"Completed morpheme {status} of {len(vectors)}")
+                
     elif args.mode == "t2v" and args.model_file and args.tensor_file:
 
         import gzip
@@ -569,9 +564,11 @@ def main():
             data, args.batch_size, args.cuda_device
         )
 
-        with gzip.open(args.output_file, "wb") as output:
+        logging.info(f"Dictionary of {len(results)} morphemes to vectors takes {sys.getsizeof(results)} bytes")
+
+        with open(args.output_file, "wb") as output:
             logging.info(
-                f"Saving gzipped dictionary of morphemes to vectors in {args.output_file}"
+                f"Saving dictionary of {len(results)} morphemes to vectors in {args.output_file}"
             )
             pickle.dump(results, output)
 
