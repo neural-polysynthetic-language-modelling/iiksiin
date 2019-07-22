@@ -16,3 +16,17 @@ Run:
 cat bible.txt |python3 iiksiin.py -d '>' -a alphabet.txt -o guarani.tensors
 
 ```
+
+
+## How to use
+
+* Start with a file called prefix.txt, where you replace prefix with something meaningful to you. This file should contain whitespace-separated words, where each word is composed of one or more morphemes\
+, with morphemes separated by a morpheme boundary.
+
+* Run `make prefix.tensors` to construct TPR representation of each morpheme.
+
+* Run `make prefix.model` to train an autoencoder over those TPR representations.
+
+* Run `make prefix.vectors` to extract vector representations of each morpheme from the trained autoencoder's final hidden layer
+
+* Run `make prefix.test` to reconstruct surface strings from the vector representations.
