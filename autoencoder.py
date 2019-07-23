@@ -150,7 +150,7 @@ class Autoencoder(torch.nn.Module):
         return tensor_at_output_layer
 
     def _apply_hidden_layers(
-        self, tensor_at_input_layer: torch.Tensor, cuda_device=1
+        self, tensor_at_input_layer: torch.Tensor,
     ) -> torch.Tensor:
         tensor_at_previous_layer: torch.nn.Module = tensor_at_input_layer
 
@@ -163,11 +163,11 @@ class Autoencoder(torch.nn.Module):
         return tensor_at_current_layer
 
     def _apply_output_layer(
-        self, tensor_at_hidden_layer: torch.Tensor, cuda_device: int = 1
+        self, tensor_at_hidden_layer: torch.Tensor,
     ) -> torch.Tensor:
         #return 
         #sigmoid(
-        return    self.output_layer(tensor_at_hidden_layer.cuda(device=cuda_device))
+        return    self.output_layer(tensor_at_hidden_layer) #.cuda(device=cuda_device))
         #)
 
     #    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
