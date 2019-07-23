@@ -382,6 +382,7 @@ def main(
     input_file: str,
     output_file: str,
     verbose: int,
+    blacklist_char: str,
 ) -> None:
 
     import pickle
@@ -461,7 +462,9 @@ def main(
             for number, line in enumerate(input_source):
                 logging.debug(f"Processing line {number}\t{line.strip()}")
                 for word in line.strip().split():
-                    if word not in result:
+                    if blacklist_char in word:
+                        logging.info(f"Skipping unanalyzed word {word}")
+                    elif word not in result:
                         for character in grapheme.graphemes(word):
                             if character not in alphabet_set and character != morpheme_delimiter and character != end_of_morpheme_symbol:
                                 logging.warning(f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}")
@@ -554,6 +557,14 @@ if __name__ == "__main__":
         help="Input file containing whitespace delimited words (- for standard input)",
     )
     arg_parser.add_argument(
+        "--blacklist_char",
+        metavar="filename",
+        type=str,
+        nargs="?",
+        default="*",
+        help="Character that marks unanalyzed words that should be ignored",
+    )
+    arg_parser.add_argument(
         "-o",
         "--output_file",
         metavar="filename",
@@ -577,4 +588,5 @@ if __name__ == "__main__":
         input_file=args.input_file,
         output_file=args.output_file,
         verbose=args.verbose,
+        blacklist_char=args.blacklist_char
     )
