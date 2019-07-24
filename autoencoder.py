@@ -7,7 +7,8 @@ import torch.nn  # type: ignore
 import torch.optim  # type: ignore
 from torch import sigmoid  # type: ignore
 from torch.nn.functional import relu, cross_entropy  # type: ignore
-#import torch.nn.modules  # type: ignore
+
+# import torch.nn.modules  # type: ignore
 from typing import Mapping, Dict, List, Tuple, Iterable, Iterator
 import sys
 
@@ -72,10 +73,10 @@ class Tensors:
         ).shape[0]
 
     def shape(self):
-#        print(type(self.tensor_dict))
-#        print(type(self.tensor_dict.values()))
-#        print(type(iter(self.tensor_dict.values())))
-#        print(type(next(iter(self.tensor_dict.values()))))
+        #        print(type(self.tensor_dict))
+        #        print(type(self.tensor_dict.values()))
+        #        print(type(iter(self.tensor_dict.values())))
+        #        print(type(next(iter(self.tensor_dict.values()))))
         return next(iter(self.tensor_dict.values())).shape
 
     @staticmethod
@@ -130,11 +131,15 @@ class Autoencoder(torch.nn.Module):
         for n in range(num_hidden_layers):  # type: int
             if n == 0:
                 self.hidden_layers.append(
-                    torch.nn.Linear(self.input_dimension_size, self.hidden_layer_size, bias=True)
+                    torch.nn.Linear(
+                        self.input_dimension_size, self.hidden_layer_size, bias=True
+                    )
                 )
             else:
                 self.hidden_layers.append(
-                    torch.nn.Linear(self.hidden_layer_size, self.hidden_layer_size, bias=True)
+                    torch.nn.Linear(
+                        self.hidden_layer_size, self.hidden_layer_size, bias=True
+                    )
                 )
         self.output_layer: torch.nn.Module = torch.nn.Linear(
             self.hidden_layer_size, self.input_dimension_size, bias=True
@@ -149,26 +154,22 @@ class Autoencoder(torch.nn.Module):
         )
         return tensor_at_output_layer
 
-    def _apply_hidden_layers(
-        self, tensor_at_input_layer: torch.Tensor,
-    ) -> torch.Tensor:
+    def _apply_hidden_layers(self, tensor_at_input_layer: torch.Tensor) -> torch.Tensor:
         tensor_at_previous_layer: torch.nn.Module = tensor_at_input_layer
 
         for hidden in self.hidden_layers:  # type: torch.nn.Module
-            tensor_at_current_layer: torch.Tensor =   relu(
+            tensor_at_current_layer: torch.Tensor = relu(
                 hidden(tensor_at_previous_layer)
             )
             tensor_at_previous_layer = tensor_at_current_layer
 
         return tensor_at_current_layer
 
-    def _apply_output_layer(
-        self, tensor_at_hidden_layer: torch.Tensor,
-    ) -> torch.Tensor:
-        #return 
-        #sigmoid(
-        return    self.output_layer(tensor_at_hidden_layer) #.cuda(device=cuda_device))
-        #)
+    def _apply_output_layer(self, tensor_at_hidden_layer: torch.Tensor) -> torch.Tensor:
+        # return
+        # sigmoid(
+        return self.output_layer(tensor_at_hidden_layer)  # .cuda(device=cuda_device))
+        # )
 
     #    def run_v2t(self, data, max_items_per_batch: int, cuda_device: int):
     #
@@ -209,14 +210,14 @@ class Autoencoder(torch.nn.Module):
             for n in range(min(number_of_results, len(morphemes))):  # type: int
                 morpheme: str = morphemes[n]
                 tensor: torch.Tensor = batch_of_results[n]
-                #print(tensor)
-                #print(tensor.shape)
-                #print(tensor.tolist())
-                #sys.exit(0)
+                # print(tensor)
+                # print(tensor.shape)
+                # print(tensor.tolist())
+                # sys.exit(0)
                 results[morpheme] = tensor.tolist()
-                #print(results[morpheme])
-                #print(results[morpheme].shape)
-                #sys.exit(0)
+                # print(results[morpheme])
+                # print(results[morpheme].shape)
+                # sys.exit(0)
 
         return results
 
@@ -374,19 +375,26 @@ class UnbindingLoss(torch.nn.modules.loss._Loss):
         alpha_tensor = []
         for character in self.alphabet.keys():
             i = self.alphabet[character]
-            gold_character_vector = torch.zeros(len(self.alphabet)+1)
+            gold_character_vector = torch.zeros(len(self.alphabet) + 1)
             gold_character_vector[i] = 1.0
             alpha_tensor.append(gold_character_vector)
-        oov = torch.zeros(len(self.alphabet)+1)
+        oov = torch.zeros(len(self.alphabet) + 1)
         oov[0] = 1.0
         alpha_tensor.insert(0, oov)
         alpha_tensor = torch.stack(alpha_tensor)
-        self.register_buffer('alpha_tensor', alpha_tensor)
+        self.register_buffer("alpha_tensor", alpha_tensor)
 
     def forward(self, input, target):
-        distances = torch.einsum("bcm,ac-> bam", input.view(input.size(0), len(self.alphabet)+1, -1), self.alpha_tensor)
+        distances = torch.einsum(
+            "bcm,ac-> bam",
+            input.view(input.size(0), len(self.alphabet) + 1, -1),
+            self.alpha_tensor,
+        )
         return cross_entropy(
-                distances, target.view(target.size(0), len(self.alphabet)+1, -1).argmax(dim=1), weight=self.weight, ignore_index=self.ignore_index
+            distances,
+            target.view(target.size(0), len(self.alphabet) + 1, -1).argmax(dim=1),
+            weight=self.weight,
+            ignore_index=self.ignore_index,
         )
 
 
@@ -416,7 +424,9 @@ def main():
             num_hidden_layers=args.hidden_layers,
         )
 
-        criterion: torch.nn.Module = UnbindingLoss(alphabet=data.alphabet).to(f'cuda:{args.cuda_device}')
+        criterion: torch.nn.Module = UnbindingLoss(alphabet=data.alphabet).to(
+            f"cuda:{args.cuda_device}"
+        )
         optimizer: torch.optim.Optimizer = torch.optim.Adam(
             model.parameters(), lr=args.learning_rate
         )
@@ -449,7 +459,7 @@ def main():
             actual: str = TensorProductRepresentation.extract_surface_form(
                 alphabet=data.alphabet, morpheme_tensor=tensor
             )
-#            print(f"{expected==actual}\t{expected}\t{actual}")
+    #            print(f"{expected==actual}\t{expected}\t{actual}")
 
     elif args.mode == "tv2s" and args.tensor_file:
 
@@ -472,9 +482,9 @@ def main():
         for key_value_tuple in results.items():
             #            print(key_value_tuple)
             expected: str = key_value_tuple[0]
-#            print(f'Expected string is "{expected}":')
-#            for c in expected:
-#                print(Alphabet.unicode_info(c))
+            #            print(f'Expected string is "{expected}":')
+            #            for c in expected:
+            #                print(Alphabet.unicode_info(c))
             tensor_shape = data.tensor_dict[expected].shape
 
             #            print(tensor_dict[expected].shape)
@@ -496,13 +506,13 @@ def main():
                 alphabet=data.alphabet, morpheme_tensor=tensor
             )
 
-#            print(
-#                f"Expected {expected} tensor:\n{data.tensor_dict[expected]}\n{data.tensor_dict[expected].nonzero()}\tActual {tensor}"
-#            )
+            #            print(
+            #                f"Expected {expected} tensor:\n{data.tensor_dict[expected]}\n{data.tensor_dict[expected].nonzero()}\tActual {tensor}"
+            #            )
 
-#            actual = actual.replace(Alphabet.END_OF_MORPHEME,'')
-#            actual = actual.replace(Alphabet.END_OF_TRANSMISSION, '')
-            report=f"{expected==actual}\t{expected}\t{actual}"
+            #            actual = actual.replace(Alphabet.END_OF_MORPHEME,'')
+            #            actual = actual.replace(Alphabet.END_OF_TRANSMISSION, '')
+            report = f"{expected==actual}\t{expected}\t{actual}"
             logging.info(report)
             print(report)
             sys.stdout.flush()
@@ -520,10 +530,14 @@ def main():
         with open(args.vector_file, "rb") as f:
             vectors: Dict[str, List[float]] = pickle.load(f, encoding="utf8")
 
-        logging.info(f"Loading previously trained autoencoder model from {args.model_file}")
+        logging.info(
+            f"Loading previously trained autoencoder model from {args.model_file}"
+        )
         model: Autoencoder = torch.load(args.model_file)
-        
-        logging.info(f"Processing {len(vectors)} vectors through autoencoder output layer...")
+
+        logging.info(
+            f"Processing {len(vectors)} vectors through autoencoder output layer..."
+        )
         status = 0
         with open(args.output_file, "w") as output_file:
             for key_value_tuple in vectors.items():
@@ -532,20 +546,20 @@ def main():
                 vector: List[float] = key_value_tuple[1]
 
                 if args.cuda_device < 0:
-                    tensor: torch.Tensor = model._apply_output_layer(torch.tensor(vector)).reshape(
-                        tensor_shape
-                    ).cpu()
+                    tensor: torch.Tensor = model._apply_output_layer(
+                        torch.tensor(vector)
+                    ).reshape(tensor_shape).cpu()
                 else:
-                    tensor: torch.Tensor = model._apply_output_layer(torch.tensor(vector)).reshape(
-                        tensor_shape
-                    ).cuda(device=args.cuda_device)
+                    tensor: torch.Tensor = model._apply_output_layer(
+                        torch.tensor(vector)
+                    ).reshape(tensor_shape).cuda(device=args.cuda_device)
 
                 actual: str = TensorProductRepresentation.extract_surface_form(
                     alphabet=tensors.alphabet, morpheme_tensor=tensor
                 )
                 print(f"{expected==actual}\t{expected}\t{actual}", file=output_file)
                 logging.info(f"Completed morpheme {status} of {len(vectors)}")
-                
+
     elif args.mode == "t2v" and args.model_file and args.tensor_file:
 
         import gzip
@@ -564,7 +578,9 @@ def main():
             data, args.batch_size, args.cuda_device
         )
 
-        logging.info(f"Dictionary of {len(results)} morphemes to vectors takes {sys.getsizeof(results)} bytes")
+        logging.info(
+            f"Dictionary of {len(results)} morphemes to vectors takes {sys.getsizeof(results)} bytes"
+        )
 
         with open(args.output_file, "wb") as output:
             logging.info(
