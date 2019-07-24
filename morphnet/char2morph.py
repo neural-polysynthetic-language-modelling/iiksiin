@@ -14,16 +14,11 @@ from model import Encoder, Decoder, Seq2Seq
 import sys
 import pickle
 import gzip
+from .. import autoencoder
 
 
 def parse_arguments():
     p = argparse.ArgumentParser(description="Hyperparams")
-    p.add_argument(
-        "-e", "--epochs", type=int, default=100, help="number of epochs for train"
-    )
-    p.add_argument(
-        "-b", "--batch_size", type=int, default=32, help="initial learning rate"
-    )
     p.add_argument(
         "--train_data",
         type=str,
@@ -31,10 +26,7 @@ def parse_arguments():
         required=True,
     )
     p.add_argument(
-        "--dev_data",
-        type=str,
-        help="morph-segmented version of validation data",
-        required=True,
+        "--dev_data", help="morph-segmented version of validation data", required=True
     )
     p.add_argument(
         "--test_data",
@@ -42,7 +34,28 @@ def parse_arguments():
         help="morph-segmented version of test data",
         required=True,
     )
-    p.add_argument("--tensor_file", type=str, help="pickled dict of morph tensors")
+    p.add_argument(
+        "--vector_file", type=str, help="pickled dict of morph vectors", required=True
+    )
+    p.add_argument(
+        "--alphabet_file",
+        type=str,
+        help="Alphabet defining padding characters and an stoi",
+        required=True,
+    )
+    p.add_argument(
+        "-m",
+        "--morph_delim",
+        type=str,
+        default=">",
+        help="character delimiting morph boundaries (default '>')",
+    )
+    p.add_argument(
+        "-e", "--epochs", type=int, default=100, help="number of epochs for train"
+    )
+    p.add_argument(
+        "-b", "--batch_size", type=int, default=32, help="initial learning rate"
+    )
     p.add_argument(
         "--max_num_morphs",
         type=int,
@@ -62,22 +75,24 @@ class Char2MorphDataset(Dataset):
     def __init__(
         self,
         morph_file,
-        tensor_file,
-        morph_delim=">",
-        max_num_morphs=10,
+        vector_dict,
+        alphabet,
+        morph_delim,
+        max_num_morphs,
         transform=None,
     ):
         self.morph_delim = morph_delim
         self.max_num_morphs = max_num_morphs
+        self.vector_dict = vector_dict
+        self.alphabet = alphabet
         self.transform = transform
-        self._init_dataset(tensor_file, morph_file)
+
+        self._init_dataset(vector_dict, morph_file)
 
     def _init_dataset(self, tensor_file, morph_file):
         with open(morph_file) as mfile:
             segmented_corpus = mfile.readlines()
 
-        with gzip.open(tensor_file) as tfile:
-            self.tensor_dict, self.alphabet = pickle.load(tfile, encoding="utf8")
         self.morph_size = next(iter(self.tensor_dict.values())).numel()
 
         self.corpus = []
@@ -104,17 +119,18 @@ class Char2MorphDataset(Dataset):
         position[index] = 1
         return torch.einsum("...j,k->...jk", (morph, position))
 
-    def _get_tensor(self, morph):
-        if morph in self.tensor_dict:
-            return self.tensor_dict[morph].data
+    def _get_vector(self, morph):
+        if morph in self.vector_dict:
+            return torch.FloatTensor(self.vector_dict[morph])
         else:
-            return torch.zeros(next(iter(self.tensor_dict.values())).size())
+            return torch.zeros(next(iter(self.vector_dict.values())).size())
 
     def _morph_tensors(self, line):
-        morphs = [word.split(">") for word in line.split()]
+        morphs = [word.split(self.morph_delim) for word in line.split()]
         return torch.stack(
             [
-                self._bind_morph_to_position(self._get_tensor(morph), i)
+                # self._bind_morph_to_position(self._get_vector(morph), i)
+                self._get_vector(morph)
                 for word in morphs
                 for i, morph in enumerate(word)
             ]
@@ -125,10 +141,6 @@ class Char2MorphDataset(Dataset):
 
     def _input_tensors(self, line):
         chars = line.replace(self.morph_delim, "").replace("\n", "")
-
-        # tensor = torch.zeros(len(chars), len(self.alphabet))
-        # ones = torch.ones(len(chars), len(self.alphabet))
-        # tensor.scatter_(1, self._charstoi(chars).unsqueeze(1).expand(len(chars),len(self.alphabet)), ones)
         return self._charstoi(chars)
 
     def __getitem__(self, idx):
@@ -144,20 +156,49 @@ class Char2MorphDataset(Dataset):
 def char2morph_collate(batch):
     chars = [item["chars"] for item in batch]
     morphs = [item["morphs"] for item in batch]
-    # print(morphs[0].size())
-    # Need to switch to enforce_sorted if we wanna use ONNX
-    chars = pad_sequence(chars)  # , enforce_sorted=False)
-    morphs = pad_sequence(morphs)  # , enforce_sorted=False)
-    # print(morphs[:,0].size())
-    # print(morphs.size())
-    # print(morphs[31,0])
+    chars = pad_sequence(chars)
+    morphs = pad_sequence(morphs)
     return {"chars": chars, "morphs": morphs}
 
 
-def load_data(batch_size, tensor_file, *, train_file, dev_file, test_file):
-    train_dataset = Char2MorphDataset(train_file, tensor_file)
-    test_dataset = Char2MorphDataset(test_file, tensor_file)
-    dev_dataset = Char2MorphDataset(dev_file, tensor_file)
+def load_data(
+    *,
+    train_file,
+    dev_file,
+    test_file,
+    vector_file,
+    batch_size,
+    morph_delim,
+    alphabet_file,
+    max_num_morphs,
+):
+    with gzip.open(vector_file) as vfile:
+        vector_dict = pickle.load(vfile, encoding="utf8")
+    with gzip.open(alphabet_file) as afile:
+        alphabet = pickle.load(afile, encoding="utf8")
+
+    train_dataset = Char2MorphDataset(
+        train_file,
+        vector_dict,
+        alphabet,
+        morph_delim=morph_delim,
+        max_num_morphs=max_num_morphs,
+    )
+    dev_dataset = Char2MorphDataset(
+        dev_file,
+        vector_dict,
+        alphabet,
+        morph_delim=morph_delim,
+        max_num_morphs=max_num_morphs,
+    )
+    test_dataset = Char2MorphDataset(
+        test_file,
+        vector_dict,
+        alphabet,
+        morph_delim=morph_delim,
+        max_num_morphs=max_num_morphs,
+    )
+
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, collate_fn=char2morph_collate
     )
@@ -167,6 +208,7 @@ def load_data(batch_size, tensor_file, *, train_file, dev_file, test_file):
     test_dataloader = torch.utils.data.DataLoader(
         test_dataset, batch_size=batch_size, collate_fn=char2morph_collate
     )
+
     return (
         train_dataloader,
         dev_dataloader,
@@ -181,36 +223,9 @@ def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet, dev
     pad = alphabet["\u0004"]
     total_loss = 0
 
-    #    src_tensor = None
-    #    tgt_tensor = None
-
     for b, batch in enumerate(train_iter):
         src = batch["chars"]
         trg = batch["morphs"]
-
-        # print(f"Starting batch {b} with src ({src.shape}) and tgt ({trg.shape})...", end="\n", file=sys.stderr)
-
-        #        del src_tensor
-        #        del tgt_tensor
-
-        #        src_tensor = torch.tensor(src.data).to(device)
-        #        tgt_tensor = torch.tensor(trg.data).to(device)
-
-        #        src_tensor=src if src_tensor is None else src_tensor.
-        #        if src_tensor is None:
-        #            src_tensor = src.to(device)
-        #            src_tensor.to(device)
-        #        else:
-        #            print(f"Before, src_tensor.is_cuda == {src_tensor.is_cuda}", file=sys.stderr)
-        #            src_tensor.data = src.data.to(device)
-        #            print(f"After, src_tensor.is_cuda == {src_tensor.is_cuda}", file=sys.stderr)           #
-        #
-        #        if tgt_tensor is None:
-        #            tgt_tensor = trg.to(device)
-        #            tgt_tensor.to(device)
-        #        else:
-        #            tgt_tensor.data = trg.data.to(device)
-
         # TODO: Remove volatile=True and replace with with torch.no_grad():
         src_tensor = Variable(src.data.to(device), volatile=True)
         tgt_tensor = Variable(trg.data.to(device), volatile=True)
@@ -220,7 +235,7 @@ def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet, dev
         output = model(src_tensor, tgt_tensor, teacher_forcing_ratio=0.0)
 
         # fix
-        loss = F.mse_loss(output.view(-1), tgt_tensor.contiguous().view(-1))
+        loss = F.mse_loss(output, tgt_tensor)
         total_loss += (
             loss.data
         )  # TODO: UserWarning: invalid index of a 0-dim tensor. This will be an error in PyTorch 0.5. Use tensor.item() to convert a 0-dim tensor to a Python number
@@ -240,13 +255,13 @@ def evaluate(model, val_iter, tensor_size, alphabet, device):
     pad = alphabet["\u0004"]
     total_loss = 0
     for b, batch in enumerate(val_iter):
-        src = batch["chars"]  # not sure if this is the right interface for batch
+        src = batch["chars"]
         trg = batch["morphs"]
         src, trg = src.to(device), trg.to(device)
         output = model(src, trg)
 
         # fix
-        loss = F.mse_loss(output.view(-1), trg.contiguous().view(-1), ignore_index=pad)
+        loss = F.mse_loss(output, trg, ignore_index=pad)
         total_loss += loss.data[0]
 
         del src
@@ -254,6 +269,19 @@ def evaluate(model, val_iter, tensor_size, alphabet, device):
         del loss
         del output
     return total_loss / val_iter
+
+
+def segment_corpus(model, train_iter, val_iter, test_iter, alphabet, device):
+    model.eval()
+    pad = alphabet["\u0004"]
+    for b, batch in enumerate(train_iter):
+        src = batch["chars"]
+        trg = batch["morphs"]
+        src, trg = src.to(device), trg.to(device)
+        output = model(src, trg)
+
+        del src
+        del trg
 
 
 def debug():
@@ -292,28 +320,19 @@ def main():
 
     print("[!] preparing dataset...", file=sys.stderr)
     train_iter, dev_iter, test_iter, alphabet, morph_size = load_data(
-        args.batch_size,
-        args.tensor_file,
         train_file=args.train_file,
         dev_file=args.dev_file,
         test_file=args.test_file,
+        vector_file=args.vector_file,
+        alphabet_file=args.alphabet_file,
+        batch_size=args.batch_size,
+        morph_delim=args.morph_delim,
     )
     print(
         f"[TRAIN]:{len(train_iter)} (dataset:{len(train_iter.dataset)})\t"
         + f"[TEST]:{len(test_iter)} (dataset:{len(test_iter.dataset)})",
         file=sys.stderr,
     )
-
-    #    print(
-    #        "[TRAIN]:%d (dataset:%d)\t[TEST]:%d (dataset:%d)"
-    #        % (
-    ##            len(train_iter),
-    #            len(train_iter.dataset),
-    #            len(test_iter),
-    #            len(test_iter.dataset),
-    #        )
-    #    )
-    # print("[DE_vocab]:%d [en_vocab]:%d" % (de_size, en_size))
 
     print("[!] Instantiating models...", file=sys.stderr)
     encoder = Encoder(len(alphabet), embed_size, hidden_size, n_layers=2, dropout=0.5)
@@ -347,7 +366,7 @@ def main():
             file=sys.stderr,
         )
         flush()
-        # Save the model if the devidation loss is the best we've seen so far.
+        # Save the model if the dev loss is the best we've seen so far.
         if not best_dev_loss or dev_loss < best_dev_loss:
             print("[!] saving model...", file=sys.stderr)
             if not os.path.isdir(".save"):

@@ -6,21 +6,22 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import sys
 
+
 class Encoder(nn.Module):
     def __init__(self, input_size, embed_size, hidden_size, n_layers=1, dropout=0.5):
         super(Encoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.embed_size = embed_size
-        self.embed = nn.Embedding(input_size+1, embed_size)
+        self.embed = nn.Embedding(input_size + 1, embed_size)
         self.gru = nn.GRU(
             embed_size, hidden_size, n_layers, dropout=dropout, bidirectional=True
         )
 
     def forward(self, src, hidden=None):
-        #print(f"In src.is_cuda is {src.is_cuda}", file=sys.stderr)
+        # print(f"In src.is_cuda is {src.is_cuda}", file=sys.stderr)
         sys.stderr.flush()
-        #print(src)
+        # print(src)
         embedded = self.embed(src)
         outputs, hidden = self.gru(embedded, hidden)
         # sum bidirectional outputs
@@ -68,7 +69,7 @@ class Decoder(nn.Module):
         print(hidden_size)
         print(output_size)
         self.gru = nn.GRU(
-            hidden_size+embed_size, hidden_size, n_layers, dropout=dropout
+            hidden_size + embed_size, hidden_size, n_layers, dropout=dropout
         )
         self.out = nn.Linear(hidden_size * 2, output_size)
 
@@ -90,6 +91,7 @@ class Decoder(nn.Module):
         # output = F.log_softmax(output, dim=1)
         return output, hidden, attn_weights
 
+
 class Seq2Seq(nn.Module):
     def __init__(self, encoder, decoder, device):
         super(Seq2Seq, self).__init__()
@@ -97,7 +99,7 @@ class Seq2Seq(nn.Module):
         self.decoder = decoder
         self.device = device
 
-    def forward(self, src, trg, teacher_forcing_ratio=0.5):
+    def forward(self, src, trg, teacher_forcing_ratio=0.0):
         batch_size = src.size(1)
         max_len = trg.size(0)
         morph_size = self.decoder.output_size
