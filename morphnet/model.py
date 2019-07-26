@@ -65,9 +65,6 @@ class Decoder(nn.Module):
         # self.embed = nn.Embedding(output_size, embed_size)
         self.dropout = nn.Dropout(dropout, inplace=True)
         self.attention = Attention(hidden_size)
-        print(embed_size)
-        print(hidden_size)
-        print(output_size)
         self.gru = nn.GRU(
             hidden_size + embed_size, hidden_size, n_layers, dropout=dropout
         )
@@ -76,8 +73,8 @@ class Decoder(nn.Module):
     def forward(self, inp, last_hidden, encoder_outputs):
         # Get the embedding of the current input word (last output word)
         # embedded = self.embed(input).unsqueeze(0)  # (1,B,N)
-        embedded = self.dropout(inp)
-        embedded = embedded.view(embedded.size()[0], -1).unsqueeze(0)
+        # embedded = self.dropout(inp)
+        embedded = inp.view(inp.size()[0], -1).unsqueeze(0)
         # Calculate attention weights and apply to encoder outputs
         attn_weights = self.attention(last_hidden[-1], encoder_outputs)
         context = attn_weights.bmm(encoder_outputs.transpose(0, 1))  # (B,1,N)
@@ -103,7 +100,7 @@ class Seq2Seq(nn.Module):
         batch_size = src.size(1)
         max_len = trg.size(0)
         morph_size = self.decoder.output_size
-        outputs = Variable(torch.zeros(max_len, batch_size, morph_size)).to(self.device)
+        outputs = Variable(torch.zeros(max_len, batch_size, morph_size), requires_grad=True).to(self.device)
 
         encoder_output, hidden = self.encoder(src)
         hidden = hidden[: self.decoder.n_layers]
@@ -113,5 +110,5 @@ class Seq2Seq(nn.Module):
             outputs[t] = output
             is_teacher = random.random() < teacher_forcing_ratio
             # top1 = output.data.max(1)[1]
-            output = Variable(trg.data[t] if is_teacher else output).to(self.device)
+            output = Variable(trg.data[t] if is_teacher else output, requires_grad=True).to(self.device)
         return outputs
