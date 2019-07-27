@@ -14,7 +14,7 @@ from morphnet.model import Encoder, Decoder, Seq2Seq
 from iiksiin import Alphabet, Dimension, OneHotVector, Shape
 import sys
 import pickle
-from autoencoder import UnbindingLoss, TrueTensorRetreiver
+from autoencoder import UnbindingLoss, TrueTensorRetreiver, Autoencoder
 
 
 def parse_arguments():
@@ -241,8 +241,8 @@ def train(
     model.train()
     pad = alphabet[alphabet.__class__.END_OF_TRANSMISSION]
     total_loss = 0
-    criterion = UnbindingLoss(alphabet=alphabet).to(device)
-    retreiver = TrueTensorRetreiver(alphabet=alphabet)
+    criterion = UnbindingLoss(alphabet=alphabet._symbols).to(device)
+    retreiver = TrueTensorRetreiver(alphabet=alphabet._symbols, device=device)
 
     for b, batch in enumerate(train_iter):
         src = batch["chars"]
@@ -255,11 +255,11 @@ def train(
         del trg
 
         output = model(src_tensor, tgt_tensor, teacher_forcing_ratio=0.0)
-        tensor = autoencoder._apply_output_layer(output)
+        output = autoencoder._apply_output_layer(output)
         correct = autoencoder._apply_output_layer(tgt_tensor)
         correct = retreiver.retreive(correct)
         # fix
-        loss = criterion(output, correct)
+        loss = criterion(output.squeeze(0), correct.squeeze(0))
         loss.backward()
         optimizer.step()
         total_loss += (
@@ -269,32 +269,29 @@ def train(
         del loss
         #     print(f"batch {b} complete.", file=sys.stderr)
         sys.stderr.flush()
-        if b % 100 == 0:
-            total_loss = total_loss / 100
-            print("[%d][loss:%5.2f][pp:%5.2f]" % (b, total_loss, math.exp(total_loss)))
-            sys.stdout.flush()
-            total_loss = 0
 
+    print("[%d][loss:%5.2f][pp:%5.2f]" % (b, total_loss/b, math.exp(total_loss/b)))
+    sys.stdout.flush()
 
 def evaluate(model, autoencoder, val_iter, tensor_size, alphabet, device):
     model.eval()
     pad = alphabet[alphabet.__class__.END_OF_TRANSMISSION]
     total_loss = 0
-    for b, batch in enumerate(val_iter):
-        src = batch["chars"]
-        trg = batch["morphs"]
-        src, trg = src.to(device), trg.to(device)
-        output = model(src, trg)
+    #for b, batch in enumerate(val_iter):
+    #    src = batch["chars"]
+    #    trg = batch["morphs"]
+    #    src, trg = src.to(device), trg.to(device)
+    #    output = model(src, trg)
 
         # fix
-        loss = F.mse_loss(output, trg)
-        total_loss += loss.data
+    #    loss = F.mse_loss(output, trg)
+    #    total_loss += loss.data
 
-        del src
-        del trg
-        del loss
-        del output
-    return total_loss / len(val_iter)
+    #    del src
+    #    del trg
+    #    del loss
+    #    del output
+    #return total_loss / len(val_iter)
 
 
 def segment_corpus(model, train_iter, val_iter, test_iter, alphabet, device):
@@ -362,12 +359,12 @@ def main():
     )
 
     print("[!] Instantiating models...", file=sys.stderr)
-    encoder = Encoder(len(alphabet), embed_size, hidden_size, n_layers=2, dropout=0.5)
+    encoder = Encoder(len(alphabet._vector), embed_size, hidden_size, n_layers=2, dropout=0.5)
     decoder = Decoder(morph_size, hidden_size, morph_size, n_layers=1, dropout=0.5)
     seq2seq = Seq2Seq(encoder, decoder, device).to(device)
     optimizer = optim.Adam(seq2seq.parameters(), lr=args.lr)
     print(seq2seq, file=sys.stderr)
-    autoencoder = torch.load(args.autoencoder_model)
+    autoencoder = torch.load(args.autoencoder_model).to(device)
     best_dev_loss = None
     for e in range(1, args.epochs + 1):
         print("HELOOOOOOOO")

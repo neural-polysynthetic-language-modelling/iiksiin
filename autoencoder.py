@@ -267,9 +267,11 @@ class Autoencoder(torch.nn.Module):
                 logging.info(
                     f"Saving model to model_at_epoch_{str(epoch).zfill(len(str(num_epochs)))}.pt"
                 )
+                self.cpu()
                 torch.save(
                     self, f"model_at_epoch_{str(epoch).zfill(len(str(num_epochs)))}.pt"
                 )
+                self.cuda(device=cuda_device)
 
             # Backward pass
             optimizer.step()
@@ -358,27 +360,28 @@ def program_arguments():
 
 
 class TrueTensorRetreiver:
-    def __init__(self, *, alphabet):
+    def __init__(self, *, alphabet, device):
         self.alphabet = alphabet
         alpha_tensor = []
         for character in self.alphabet.keys():
             i = self.alphabet[character]
             gold_character_vector = torch.zeros(len(self.alphabet) + 1)
-            gold_character_vector = 1.0
+            gold_character_vector[i] = 1.0
             alpha_tensor.append(gold_character_vector)
         oov = torch.zeros(len(self.alphabet) + 1)
         oov[0] = 1.0
         alpha_tensor.insert(0, oov)
-        self.alpha_tensor = torch.stack(alpha_tensor)
+        self.alpha_tensor = torch.stack(alpha_tensor).to(device)
 
-    def retreive(input):
+    def retreive(self, input):
+        input = input.squeeze(0)
         distances = torch.einsum(
             "bcm,ac-> bam",
             input.view(input.size(0), len(self.alphabet) + 1, -1),
             self.alpha_tensor,
         )
         indices = torch.argmax(distances, dim=1)
-        return torch.zeros_like(input).scatter_(1, indices, torch.ones_like(distances))
+        return torch.zeros_like(distances).scatter_(1, indices.unsqueeze(1).expand(-1, distances.size(1), -1), torch.ones_like(distances))
 
 
 class UnbindingLoss(torch.nn.modules.loss._Loss):
