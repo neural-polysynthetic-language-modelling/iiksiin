@@ -14,7 +14,8 @@ from morphnet.model import Encoder, Decoder, Seq2Seq
 from iiksiin import Alphabet, Dimension, OneHotVector, Shape
 import sys
 import pickle
-import autoencoder
+from autoencoder import UnbindingLoss, TrueTensorRetreiver
+
 
 def parse_arguments():
     p = argparse.ArgumentParser(description="Hyperparams")
@@ -43,6 +44,12 @@ def parse_arguments():
         "--alphabet_file",
         type=str,
         help="Alphabet defining padding characters and an stoi",
+        required=True,
+    )
+    p.add_argument(
+        "--autoencoder_model",
+        type=str,
+        help="path to dumped torch file of autoencoder params.",
         required=True,
     )
     p.add_argument(
@@ -174,9 +181,9 @@ def load_data(
     alphabet_file,
     max_num_morphs,
 ):
-    with open(vector_file, 'rb') as vfile:
+    with open(vector_file, "rb") as vfile:
         vector_dict = pickle.load(vfile, encoding="utf8")
-    with open(alphabet_file, 'rb') as afile:
+    with open(alphabet_file, "rb") as afile:
         alphabet = pickle.load(afile, encoding="utf8")
 
     train_dataset = Char2MorphDataset(
@@ -220,23 +227,39 @@ def load_data(
     )
 
 
-def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet, device):
+def train(
+    e,
+    model,
+    autoencoder,
+    optimizer,
+    train_iter,
+    tensor_size,
+    grad_clip,
+    alphabet,
+    device,
+):
     model.train()
     pad = alphabet[alphabet.__class__.END_OF_TRANSMISSION]
     total_loss = 0
+    criterion = UnbindingLoss(alphabet=alphabet).to(device)
+    retreiver = TrueTensorRetreiver(alphabet=alphabet)
 
     for b, batch in enumerate(train_iter):
         src = batch["chars"]
         trg = batch["morphs"]
         # TODO: Remove volatile=True and replace with with torch.no_grad():
+        optimizer.zero_grad()
         src_tensor = Variable(src.data.to(device), volatile=True)
         tgt_tensor = Variable(trg.data.to(device), volatile=True)
         del src
         del trg
 
         output = model(src_tensor, tgt_tensor, teacher_forcing_ratio=0.0)
+        tensor = autoencoder._apply_output_layer(output)
+        correct = autoencoder._apply_output_layer(tgt_tensor)
+        correct = retreiver.retreive(correct)
         # fix
-        loss = F.mse_loss(output, tgt_tensor)
+        loss = criterion(output, correct)
         loss.backward()
         optimizer.step()
         total_loss += (
@@ -253,7 +276,7 @@ def train(e, model, optimizer, train_iter, tensor_size, grad_clip, alphabet, dev
             total_loss = 0
 
 
-def evaluate(model, val_iter, tensor_size, alphabet, device):
+def evaluate(model, autoencoder, val_iter, tensor_size, alphabet, device):
     model.eval()
     pad = alphabet[alphabet.__class__.END_OF_TRANSMISSION]
     total_loss = 0
@@ -340,24 +363,19 @@ def main():
 
     print("[!] Instantiating models...", file=sys.stderr)
     encoder = Encoder(len(alphabet), embed_size, hidden_size, n_layers=2, dropout=0.5)
-    decoder = Decoder(
-        morph_size,
-        hidden_size,
-        morph_size,
-        n_layers=1,
-        dropout=0.5,
-    )
+    decoder = Decoder(morph_size, hidden_size, morph_size, n_layers=1, dropout=0.5)
     seq2seq = Seq2Seq(encoder, decoder, device).to(device)
     optimizer = optim.Adam(seq2seq.parameters(), lr=args.lr)
     print(seq2seq, file=sys.stderr)
-
+    autoencoder = torch.load(args.autoencoder_model)
     best_dev_loss = None
     for e in range(1, args.epochs + 1):
-        print('HELOOOOOOOO')
+        print("HELOOOOOOOO")
         print(next(seq2seq.parameters()))
         train(
             e,
             seq2seq,
+            autoencoder,
             optimizer,
             train_iter,
             morph_size,
@@ -365,7 +383,9 @@ def main():
             alphabet,
             device,
         )
-        dev_loss = evaluate(seq2seq, dev_iter, morph_size, alphabet, device)
+        dev_loss = evaluate(
+            seq2seq, autoencoder, dev_iter, morph_size, alphabet, device
+        )
         print(
             "[Epoch:%d] dev_loss:%5.3f | dev_pp:%5.2fS"
             % (e, dev_loss, math.exp(dev_loss)),
