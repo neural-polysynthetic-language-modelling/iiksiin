@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.7
+
 # based on https://github.com/keon/seq2seq
 
 import os
@@ -14,8 +16,8 @@ from morphnet.model import Encoder, Decoder, Seq2Seq
 from iiksiin import Alphabet, Dimension, OneHotVector, Shape
 import sys
 import pickle
-from autoencoder import UnbindingLoss, TrueTensorRetreiver, Autoencoder
-
+from autoencoder import UnbindingLoss, Autoencoder
+from unbind import TrueTensorRetreiver
 
 def parse_arguments():
     p = argparse.ArgumentParser(description="Hyperparams")
@@ -257,7 +259,7 @@ def train(
         output = model(src_tensor, tgt_tensor, teacher_forcing_ratio=0.0)
         output = autoencoder._apply_output_layer(output)
         correct = autoencoder._apply_output_layer(tgt_tensor)
-        correct = retreiver.retreive(correct)
+        correct = retreiver.retreive(correct.squeeze(0))
         # fix
         loss = criterion(output.squeeze(0), correct.squeeze(0))
         loss.backward()
@@ -291,7 +293,7 @@ def evaluate(model, autoencoder, val_iter, tensor_size, alphabet, device):
     #    del trg
     #    del loss
     #    del output
-    #return total_loss / len(val_iter)
+    return total_loss / len(val_iter)
 
 
 def segment_corpus(model, train_iter, val_iter, test_iter, alphabet, device):
@@ -362,13 +364,11 @@ def main():
     encoder = Encoder(len(alphabet._vector), embed_size, hidden_size, n_layers=2, dropout=0.5)
     decoder = Decoder(morph_size, hidden_size, morph_size, n_layers=1, dropout=0.5)
     seq2seq = Seq2Seq(encoder, decoder, device).to(device)
-    optimizer = optim.Adam(seq2seq.parameters(), lr=args.lr)
+    optimizer = optim.SGD(seq2seq.parameters(), lr=args.lr)
     print(seq2seq, file=sys.stderr)
     autoencoder = torch.load(args.autoencoder_model).to(device)
     best_dev_loss = None
     for e in range(1, args.epochs + 1):
-        print("HELOOOOOOOO")
-        print(next(seq2seq.parameters()))
         train(
             e,
             seq2seq,
@@ -390,7 +390,7 @@ def main():
         )
         flush()
         # Save the model if the dev loss is the best we've seen so far.
-        if not best_dev_loss or dev_loss < best_dev_loss:
+        if e % 30 == 0:
             print("[!] saving model...", file=sys.stderr)
             if not os.path.isdir(".save"):
                 os.makedirs(".save")
