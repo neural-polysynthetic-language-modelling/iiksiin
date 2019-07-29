@@ -62,8 +62,16 @@ class BatchInfo:
 
 
 class Tensors:
-    def __init__(self, tensor_dict: Mapping[str, torch.Tensor], alphabet: Alphabet):
+    def __init__(
+        self,
+        tensor_dict: Mapping[str, torch.Tensor],
+        alphabet: Alphabet,
+        morpheme_dict,
+        nmorphs,
+    ):
         self.tensor_dict: Mapping[str, torch.Tensor] = tensor_dict
+        self.morpheme_dict = morpheme_dict
+        self.nmorphs = nmorphs
         self.alphabet: Alphabet = alphabet
         self.morph_size: int = next(
             iter(self.tensor_dict.values())
@@ -80,7 +88,7 @@ class Tensors:
         return next(iter(self.tensor_dict.values())).shape
 
     @staticmethod
-    def load_from_pickle_file(tensor_file: str) -> "Tensors":
+    def load_from_pickle_file(tensor_file: str, morpheme_file: str) -> "Tensors":
         import pickle
         import gzip
 
@@ -91,10 +99,22 @@ class Tensors:
             tensor_dict: Dict[str, torch.Tensor] = result[0]
             alphabet: Alphabet = result[1]
             # (tensor_dict, alphabet:Alphabet) = pickle.load(f, encoding='utf8')
-            return Tensors(tensor_dict, alphabet)
+            with open(morpheme_file) as mfile:
+                # morpheme dict should have type Dict[str, Tuple[int, List[int]]]
+                nmorphs, morpheme_dict = pickle.load(mfile, encoding="utf8")
+                return Tensors(tensor_dict, alphabet, morpheme_dict, nmorphs)
 
     def get_batch_info(self, items_per_batch) -> BatchInfo:
-        return BatchInfo(self.tensor_dict.keys(), items_per_batch)
+        return BatchInfo(self.morpheme_dict.keys(), items_per_batch)
+
+    def get_morpheme_role(morpheme_data):
+        id = torch.zeros(self.nmorphs)
+        id[morpheme_data[0]] = 1.0
+        feat = torch.FloatTensor(morpheme_data[1])
+        return torch.cat((id, feat))
+
+    def bind(self, filler, role):
+        return torch.einsum("...j,k->...jk", filler, role)
 
     def get_batches(
         self, items_per_batch, device_number
@@ -112,7 +132,12 @@ class Tensors:
             ):  # type: Tuple[int, str]
                 n: int = numbered_morpheme[0]
                 morpheme: str = numbered_morpheme[1]
-                tensor[n] = self.tensor_dict[morpheme].view(-1)
+                print(morpheme)
+                surface = numbered_morpheme[1].split(":")[1]
+                tensor[n] = self.bind(
+                    self.tensor_dict[surface],
+                    self.get_morpheme_role(self.morpheme_dict[morpheme]),
+                ).view(-1)
 
             if 0 <= device_number < torch.cuda.device_count():
                 yield (batch_number, tensor.cuda(device_number))
@@ -357,7 +382,6 @@ def program_arguments():
     )
 
     return arg_parser
-
 
 
 class UnbindingLoss(torch.nn.modules.loss._Loss):
