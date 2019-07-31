@@ -79,6 +79,12 @@ def parse_arguments():
     p.add_argument(
         "--grad_clip", type=float, default=10.0, help="in case of gradient explosion"
     )
+    p.add_argument(
+        "--char2morph_model",
+        type=str,
+        help="path to dumped torch file of char2morph params.",
+        required=False,
+    )
     return p.parse_args()
 
 
@@ -259,9 +265,9 @@ def train(
         output = model(src_tensor, tgt_tensor, teacher_forcing_ratio=0.0)
         output = autoencoder._apply_output_layer(output)
         correct = autoencoder._apply_output_layer(tgt_tensor)
-        correct = retreiver.retreive(correct.squeeze(0))
+        correct = retreiver.retreive(correct)
         # fix
-        loss = criterion(output.squeeze(0), correct.squeeze(0))
+        loss = criterion(output, correct)
         loss.backward()
         optimizer.step()
         total_loss += (
@@ -296,15 +302,39 @@ def evaluate(model, autoencoder, val_iter, tensor_size, alphabet, device):
     return total_loss / len(val_iter)
 
 
-def segment_corpus(model, train_iter, val_iter, test_iter, alphabet, device):
+def segment_corpus(model, autoencoder, train_iter, dev_iter, test_iter, alphabet, device):
     model.eval()
+    
+    retreiver = TrueTensorRetreiver(alphabet=alphabet._symbols, device=device)
+    criterion = UnbindingLoss(alphabet=alphabet._symbols).to(device)
     pad = alphabet[alphabet.__class__.END_OF_TRANSMISSION]
+
     for b, batch in enumerate(train_iter):
         src = batch["chars"]
         trg = batch["morphs"]
         src, trg = src.to(device), trg.to(device)
         output = model(src, trg)
-
+        output = autoencoder._apply_output_layer(output)
+        correct = autoencoder._apply_output_layer(trg)
+        print(f"trg morph {trg[0,0]}")
+        #correct = retreiver.retreive(correct)
+        print(f"src {src.size()}\ttrg {trg.size()}\toutput {output.size()}\tcorrect {correct.size()}")
+#        sys.exit(0)
+        if True:
+            from_tpr = retreiver.extract_string(correct, morpheme_delimiter="^")
+            from_s2s = retreiver.extract_string(output, morpheme_delimiter="^")
+            for batch_index in range(src.size(1)):
+                original = "".join([retreiver.symbols[alphabet_index_tensor.item()] for alphabet_index_tensor in src[:,batch_index]])
+                print(f"\"{original}\"\t\"{from_tpr[batch_index]}\"\t\"{from_s2s[batch_index]}\"")
+                sys.exit(0)
+#        for morpheme in retreiver.extract_string(correct.squeeze(0)):
+#            print(morpheme)
+#        print()
+#        for morpheme in retreiver.extract_string(output.squeeze(0)):
+#            print(morpheme)        
+#        sys.exit(0)
+#        loss = criterion(output.squeeze(0), correct.squeeze(0))
+        #print(loss)
         del src
         del trg
 
@@ -360,45 +390,57 @@ def main():
         file=sys.stderr,
     )
 
+    
     print("[!] Instantiating models...", file=sys.stderr)
     encoder = Encoder(len(alphabet._vector), embed_size, hidden_size, n_layers=2, dropout=0.5)
     decoder = Decoder(morph_size, hidden_size, morph_size, n_layers=1, dropout=0.5)
     seq2seq = Seq2Seq(encoder, decoder, device).to(device)
-    optimizer = optim.SGD(seq2seq.parameters(), lr=args.lr)
-    print(seq2seq, file=sys.stderr)
     autoencoder = torch.load(args.autoencoder_model).to(device)
-    best_dev_loss = None
-    for e in range(1, args.epochs + 1):
-        train(
-            e,
-            seq2seq,
-            autoencoder,
-            optimizer,
-            train_iter,
-            morph_size,
-            args.grad_clip,
-            alphabet,
-            device,
-        )
-        dev_loss = evaluate(
-            seq2seq, autoencoder, dev_iter, morph_size, alphabet, device
-        )
-        print(
-            "[Epoch:%d] dev_loss:%5.3f | dev_pp:%5.2fS"
-            % (e, dev_loss, math.exp(dev_loss)),
-            file=sys.stderr,
-        )
+    
+    if args.char2morph_model:
+
+        seq2seq.load_state_dict(state_dict=torch.load(args.char2morph_model))
+        print(seq2seq, file=sys.stderr)
+
+        segment_corpus(seq2seq, autoencoder, train_iter, dev_iter, test_iter, alphabet, device)
+        
+    else:
+        
+        optimizer = optim.SGD(seq2seq.parameters(), lr=args.lr)
+        print(seq2seq, file=sys.stderr)
+
+        best_dev_loss = None
+        for e in range(1, args.epochs + 1):
+            train(
+                e,
+                seq2seq,
+                autoencoder,
+                optimizer,
+                train_iter,
+                morph_size,
+                args.grad_clip,
+                alphabet,
+                device,
+            )
+            dev_loss = evaluate(
+                seq2seq, autoencoder, dev_iter, morph_size, alphabet, device
+            )
+            print(
+                "[Epoch:%d] dev_loss:%5.3f | dev_pp:%5.2fS"
+                % (e, dev_loss, math.exp(dev_loss)),
+                file=sys.stderr,
+            )
+            flush()
+            # Save the model if the dev loss is the best we've seen so far.
+            if e % 3 == 0:
+                print("[!] saving model...", file=sys.stderr)
+                if not os.path.isdir(".save"):
+                    os.makedirs(".save")
+                torch.save(seq2seq.state_dict(), "./.save/char2morph_%d.pt" % (e))
+                best_dev_loss = dev_loss
+        test_loss = evaluate(seq2seq, test_iter, morph_size, alphabet, device)
+        print("[TEST] loss:%5.2f" % test_loss, file=sys.stderr)
         flush()
-        # Save the model if the dev loss is the best we've seen so far.
-        if e % 30 == 0:
-            print("[!] saving model...", file=sys.stderr)
-            if not os.path.isdir(".save"):
-                os.makedirs(".save")
-            torch.save(seq2seq.state_dict(), "./.save/char2morph_%d.pt" % (e))
-            best_dev_loss = dev_loss
-    test_loss = evaluate(seq2seq, test_iter, morph_size, alphabet, device)
-    print("[TEST] loss:%5.2f" % test_loss, file=sys.stderr)
-    flush()
 
 
 if __name__ == "__main__":

@@ -381,6 +381,7 @@ def main(
     morpheme_delimiter: str,
     input_file: str,
     output_file: str,
+    alphabet_out: str,
     verbose: int,
     blacklist_char: str,
 ) -> None:
@@ -486,6 +487,8 @@ def main(
                                     skipped_morphemes.add(morpheme)
 
             logging.info(f"Writing binary file containing {len(result)} morphemes to disk at {output}...")
+            with open(alphabet_out, 'wb') as afile:
+                pickle.dump(alphabet, afile)
             pickle.dump((result, alphabet._symbols), output)
             logging.info(f"...done writing binary file to disk at {output}", file=sys.stderr)
 
@@ -573,6 +576,13 @@ if __name__ == "__main__":
         required=True,
         help="Output file where morpheme tensors are recorded",
     )
+    arg_parser.add_argument(
+        "--alphabet_output",
+        type=str,
+        nargs="?",
+        required=True,
+        help="output file for alphabet object"
+    )
     arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
 
     args = arg_parser.parse_args()
@@ -587,6 +597,7 @@ if __name__ == "__main__":
         morpheme_delimiter=str.encode(args.morpheme_delimiter).decode("unicode_escape"),
         input_file=args.input_file,
         output_file=args.output_file,
+        alphabet_out=args.alphabet_output,
         verbose=args.verbose,
         blacklist_char=args.blacklist_char
     )
