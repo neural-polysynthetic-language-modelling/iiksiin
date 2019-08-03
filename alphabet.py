@@ -2,8 +2,9 @@
 
 import grapheme # type: ignore
 import logging
+import pickle
 import sys
-from typing import Mapping, Set, Iterable, Iterator
+from typing import List, Mapping, Set, Iterable, Iterator
 import unicodedata
 
 """Implements a character alphabet for use in the 
@@ -49,6 +50,7 @@ class Alphabet:
         self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
         self.name = name
         self.oov = 0
+        from iiksiin import Vector, OneHotVector
         self._vector: List[Vector] = list()
         for i in range(len(self.dimension)):
             self._vector.append(OneHotVector(i, self.dimension))
@@ -106,6 +108,7 @@ class Alphabet:
 
     @staticmethod
     def create_from_source(name: str, source: Iterable[str], morpheme_delimiter: str, end_of_morpheme_symbol: str, blacklist_char: str) -> "Alphabet":
+        alphabet_set: Set[str] = set()
         for line in source:
             for character in grapheme.graphemes(line.strip()):
                 category = unicodedata.category(character)
@@ -216,9 +219,9 @@ if __name__ == "__main__":
 
     main(
         name=args.description,
-        input_source=open(args.input_file) if args.input != "-" else sys.stdin,
+        input_source=open(args.input_file) if args.input_file != "-" else sys.stdin,
         output_filename=args.output_file,
-        log_filename_file=args.log,
+        log_filename=args.log,
         morpheme_delimiter=str.encode(args.morpheme_delimiter).decode("unicode_escape"),
         end_of_morpheme_symbol=str.encode(args.end_of_morpheme_symbol).decode("unicode_escape"),
         blacklist_char=args.blacklist_char
