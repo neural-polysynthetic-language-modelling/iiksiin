@@ -1,3 +1,4 @@
+from alphabet import Alphabet
 import grapheme  # type: ignore
 import gzip
 import logging
@@ -141,75 +142,6 @@ class OneHotVector(Vector):
         return f"OneHotVector({self._index}, {self.dimension})"
 
 
-class Alphabet:
-
-    END_OF_MORPHEME: str = "\u0000"
-    END_OF_TRANSMISSION: str = "\u0004"
-
-    def __init__(self, name: str, symbols: Set[str]):
-        alphabet_symbols = set(symbols)
-        alphabet_symbols.add(Alphabet.END_OF_MORPHEME)
-        alphabet_symbols.add(Alphabet.END_OF_TRANSMISSION)
-        self._symbols: Mapping[str, int] = {
-            symbol: index for (index, symbol) in enumerate(sorted(alphabet_symbols), start=1)
-        }
-        self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
-        self.name = name
-        self.oov = 0
-        self._vector: List[Vector] = list()
-        for i in range(len(self.dimension)):
-            self._vector.append(OneHotVector(i, self.dimension))
-        # self.tensor = torch.zeros(len(self.dimension), len(self.dimension))
-        # for i in range(len(self.dimension)):
-        #    self.tensor[i][i] = 1
-
-    def get_vector(self, symbol: str) -> "Vector":
-        index: int = self[symbol]
-        return self._vector[index]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._symbols.keys())
-
-    def __getitem__(self, symbol: str) -> int:
-        if symbol in self._symbols:
-            return self._symbols[symbol]
-        else:
-            return self.oov
-
-    def __str__(self) -> str:
-        return self.name
-
-    def __repr__(self) -> str:
-        return f"Alphabet({str(self.dimension)})"
-
-    @staticmethod
-    def char_to_code_point(c: str) -> str:
-        x_hex_string: str = hex(ord(c))  # a string of the form "0x95" or "0x2025"
-        hex_string: str = x_hex_string[2:]  # a string of the form "95" or "2025"
-        required_zero_padding = max(0, 4 - len(hex_string))
-        return (
-            f"U+{required_zero_padding * '0'}{hex_string}"
-        )  # a string of the form "\\u0095" or "\\u2025"
-
-    @staticmethod
-    def char_to_name(c: str) -> str:
-        try:
-            return unicodedata.name(c)
-        except ValueError:
-            return ""
-
-    @staticmethod
-    def unicode_info(s: str) -> str:
-        return (
-            s
-            + "\t"
-            + "; ".join(
-                [
-                    f"{Alphabet.char_to_code_point(c)} {Alphabet.char_to_name(c)}"
-                    for c in s
-                ]
-            )
-        )
 
 
 class Roles:
@@ -407,43 +339,6 @@ def main(
         except OSError as err:
             logging.error(f"ERROR - failed to read alphabet file {alphabet_file}:\t{err}")
             sys.exit(-1)
-
-    if (
-        len(alphabet_set) == 0 or not alphabet_file
-    ):  # Attempt to read alphabet symbols from input file
-        if input_file == "-":
-            logging.error("ERROR - When reading from standard input, an alphabet file must be provided.")
-            sys.exit(-2)
-        else:
-            logging.info(f"Reading alphabet from input file {input_file}...")
-
-            with open(input_file) as input_source:
-                for line in input_source:
-                    for character in grapheme.graphemes(line.strip()):
-                        category = unicodedata.category(character)
-                        if category[0] != "Z" and  category[0] != "C" and character != morpheme_delimiter and character != end_of_morpheme_symbol:
-                            alphabet_set.add(character)
-
-    alphabet_set.add(end_of_morpheme_symbol)
-
-    for symbol in sorted(alphabet_set):
-        for character in symbol:
-            category = unicodedata.category(character)
-            if category[0] == "Z": # and character != " ":
-                logging.warning(f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}")
-
-            elif (
-                category[0] == "C"
-                and character != morpheme_delimiter
-                and character != end_of_morpheme_symbol
-            ):
-                logging.warning(f"WARNING - alphabet contains control character:\t{Alphabet.unicode_info(symbol)}")
-
-    logging.info(f"Symbols in alphabet: {len(alphabet_set)}")
-    if verbose > 0:
-        print("-----------------------", file=sys.stderr)
-        for symbol in sorted(alphabet_set):
-            print(Alphabet.unicode_info(symbol), file=sys.stderr)
 
     with (sys.stdin if input_file == "-" else open(input_file)) as input_source:
 
