@@ -75,9 +75,9 @@ class Tensors:
         import pickle
         import gzip
         with gzip.open(tensor_file) as f:
-            result: Tuple[Dict[str, torch.Tensor], Alphabet] = pickle.load(f, encoding='utf8')
+            result: Tuple[Dict[str, torch.Tensor], Dict[str, int]] = pickle.load(f, encoding='utf8')
             tensor_dict: Dict[str, torch.Tensor] = result[0]
-            alphabet: Alphabet = result[1]
+            alphabet: Dict[str, int] = result[1]  # TODO: FIX THIS BUG
             # (tensor_dict, alphabet:Alphabet) = pickle.load(f, encoding='utf8')
             return Tensors(tensor_dict, alphabet)
 
@@ -354,7 +354,7 @@ def main():
         for key_value_tuple in data.tensor_dict.items():  # type: Tuple[str, torch.Tensor]
             expected: str = key_value_tuple[0]
             tensor: torch.Tensor = key_value_tuple[1]
-            actual: str = TensorProductRepresentation.extract_surface_form(alphabet=data.alphabet,
+            actual: str = TensorProductRepresentation.extract_surface_form(alphabet=data.alphabet._symbols,
                                                                            morpheme_tensor=tensor)
             print(f"{expected==actual}\t{expected}\t{actual}")
 
