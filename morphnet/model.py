@@ -6,21 +6,22 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import sys
 
+
 class Encoder(nn.Module):
     def __init__(self, input_size, embed_size, hidden_size, n_layers=1, dropout=0.5):
         super(Encoder, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.embed_size = embed_size
-        self.embed = nn.Embedding(input_size+1, embed_size)
+        self.embed = nn.Embedding(input_size + 1, embed_size)
         self.gru = nn.GRU(
             embed_size, hidden_size, n_layers, dropout=dropout, bidirectional=True
         )
 
     def forward(self, src, hidden=None):
-        #print(f"In src.is_cuda is {src.is_cuda}", file=sys.stderr)
+        # print(f"In src.is_cuda is {src.is_cuda}", file=sys.stderr)
         sys.stderr.flush()
-        #print(src)
+        # print(src)
         embedded = self.embed(src)
         outputs, hidden = self.gru(embedded, hidden)
         # sum bidirectional outputs
@@ -64,19 +65,16 @@ class Decoder(nn.Module):
         # self.embed = nn.Embedding(output_size, embed_size)
         self.dropout = nn.Dropout(dropout, inplace=True)
         self.attention = Attention(hidden_size)
-        print(embed_size)
-        print(hidden_size)
-        print(output_size)
         self.gru = nn.GRU(
-            hidden_size+embed_size, hidden_size, n_layers, dropout=dropout
+            hidden_size + embed_size, hidden_size, n_layers, dropout=dropout
         )
         self.out = nn.Linear(hidden_size * 2, output_size)
 
     def forward(self, inp, last_hidden, encoder_outputs):
         # Get the embedding of the current input word (last output word)
         # embedded = self.embed(input).unsqueeze(0)  # (1,B,N)
-        embedded = self.dropout(inp)
-        embedded = embedded.view(embedded.size()[0], -1).unsqueeze(0)
+        # embedded = self.dropout(inp)
+        embedded = inp.view(inp.size()[0], -1).unsqueeze(0)
         # Calculate attention weights and apply to encoder outputs
         attn_weights = self.attention(last_hidden[-1], encoder_outputs)
         context = attn_weights.bmm(encoder_outputs.transpose(0, 1))  # (B,1,N)
@@ -90,6 +88,7 @@ class Decoder(nn.Module):
         # output = F.log_softmax(output, dim=1)
         return output, hidden, attn_weights
 
+
 class Seq2Seq(nn.Module):
     def __init__(self, encoder, decoder, device):
         super(Seq2Seq, self).__init__()
@@ -97,11 +96,11 @@ class Seq2Seq(nn.Module):
         self.decoder = decoder
         self.device = device
 
-    def forward(self, src, trg, teacher_forcing_ratio=0.5):
+    def forward(self, src, trg, teacher_forcing_ratio=0.0):
         batch_size = src.size(1)
         max_len = trg.size(0)
         morph_size = self.decoder.output_size
-        outputs = Variable(torch.zeros(max_len, batch_size, morph_size)).to(self.device)
+        outputs = Variable(torch.zeros(max_len, batch_size, morph_size), requires_grad=True).to(self.device)
 
         encoder_output, hidden = self.encoder(src)
         hidden = hidden[: self.decoder.n_layers]
@@ -111,5 +110,5 @@ class Seq2Seq(nn.Module):
             outputs[t] = output
             is_teacher = random.random() < teacher_forcing_ratio
             # top1 = output.data.max(1)[1]
-            output = Variable(trg.data[t] if is_teacher else output).to(self.device)
+            output = Variable(trg.data[t] if is_teacher else output, requires_grad=True).to(self.device)
         return outputs

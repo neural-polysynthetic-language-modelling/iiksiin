@@ -1,5 +1,7 @@
+from alphabet import Alphabet
 import grapheme  # type: ignore
 import gzip
+import logging
 import torch     # type: ignore
 import sys
 from typing import Dict, List, Callable, Tuple, Set, Mapping, Iterable, Iterator
@@ -105,7 +107,7 @@ class Tensor:
             *resulting_dimensions
         )  # Using * to convert list to varargs
 
-        equation_in_einstein_notation: str = "...j, k -> ...jk"
+        equation_in_einstein_notation: str = "...j,k->...jk"
         torch_tensor: torch.Tensor = torch.einsum(
             equation_in_einstein_notation, [self.data, other.data]
         )
@@ -140,75 +142,6 @@ class OneHotVector(Vector):
         return f"OneHotVector({self._index}, {self.dimension})"
 
 
-class Alphabet:
-
-    END_OF_MORPHEME: str = "\u0000"
-    END_OF_TRANSMISSION: str = "\u0004"
-
-    def __init__(self, name: str, symbols: Set[str]):
-        alphabet_symbols = set(symbols)
-        alphabet_symbols.add(Alphabet.END_OF_MORPHEME)
-        alphabet_symbols.add(Alphabet.END_OF_TRANSMISSION)
-        self._symbols: Mapping[str, int] = {
-            symbol: index for (index, symbol) in enumerate(sorted(alphabet_symbols), start=1)
-        }
-        self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
-        self.name = name
-        self.oov = 0
-        self._vector: List[Vector] = list()
-        for i in range(len(self.dimension)):
-            self._vector.append(OneHotVector(i, self.dimension))
-        # self.tensor = torch.zeros(len(self.dimension), len(self.dimension))
-        # for i in range(len(self.dimension)):
-        #    self.tensor[i][i] = 1
-
-    def get_vector(self, symbol: str) -> "Vector":
-        index: int = self[symbol]
-        return self._vector[index]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._symbols.keys())
-
-    def __getitem__(self, symbol: str) -> int:
-        if symbol in self._symbols:
-            return self._symbols[symbol]
-        else:
-            return self.oov
-
-    def __str__(self) -> str:
-        return self.name
-
-    def __repr__(self) -> str:
-        return f"Alphabet({str(self.dimension)})"
-
-    @staticmethod
-    def char_to_code_point(c: str) -> str:
-        x_hex_string: str = hex(ord(c))  # a string of the form "0x95" or "0x2025"
-        hex_string: str = x_hex_string[2:]  # a string of the form "95" or "2025"
-        required_zero_padding = max(0, 4 - len(hex_string))
-        return (
-            f"U+{required_zero_padding * '0'}{hex_string}"
-        )  # a string of the form "\\u0095" or "\\u2025"
-
-    @staticmethod
-    def char_to_name(c: str) -> str:
-        try:
-            return unicodedata.name(c)
-        except ValueError:
-            return ""
-
-    @staticmethod
-    def unicode_info(s: str) -> str:
-        return (
-            s
-            + "\t"
-            + "; ".join(
-                [
-                    f"{Alphabet.char_to_code_point(c)} {Alphabet.char_to_name(c)}"
-                    for c in s
-                ]
-            )
-        )
 
 
 class Roles:
@@ -226,6 +159,9 @@ class Roles:
     def __iter__(self) -> Iterable[Vector]:
         return iter(self._one_hot_role_vectors)
 
+    def __len__(self) -> int:
+        return len(self._one_hot_role_vectors)
+    
     @staticmethod
     def get_one_hot_role_vectors(dimension: Dimension) -> List[Vector]:
         return [OneHotVector(index, dimension) for index in range(len(dimension))]
@@ -256,27 +192,28 @@ class TensorProductRepresentation:
         result: List[str] = list()
 
         for character_position in range(max_chars_per_morpheme):  # type: int
-            character_position_role = torch.zeros(max_chars_per_morpheme)
+            character_position_role = torch.zeros(max_chars_per_morpheme).cpu()
             character_position_role[character_position] = 1.0
         # for character_position in character_roles:  # Type: Vector
 
-            equation_in_einstein_notation: str = "...j, j -> ..."  #
+            equation_in_einstein_notation: str = "...j,j->..."  #
             """This means that the final dimension of data and the only dimension of role are the same size.
                We will be summing over that dimension."""
 
-            vector_for_current_character: torch.Tensor = torch.einsum(
-                equation_in_einstein_notation, [morpheme_tensor, character_position_role]
-            )
-           # print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
-           # print(f"character_position_role.shape is {character_position_role.shape}")
-           # print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
+#            print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
+#            print(f"character_position_role.shape is {character_position_role.shape}")
 
+            vector_for_current_character: torch.Tensor = torch.einsum(
+                equation_in_einstein_notation, [morpheme_tensor.cpu(), character_position_role.cpu()]
+            )
+#            print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
+#            print(f"vector for position {character_position}:\t{vector_for_current_character}")
             best_character = None
             best_distance = float("inf")
 
             for character in alphabet:
                 i: int = alphabet[character]
-                gold_character_vector = torch.zeros(vector_for_current_character.nelement())
+                gold_character_vector = torch.zeros(vector_for_current_character.nelement()).cpu()
                 gold_character_vector[i] = 1.0
                 #print(f"gold_character_vector.shape is {gold_character_vector.shape}")
                 # print(gold_character_vector.shape)
@@ -291,12 +228,16 @@ class TensorProductRepresentation:
                 if distance < best_distance:
                     best_character = character
                     best_distance = distance
-                    #print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
+                  #  print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
 
             if best_character == Alphabet.END_OF_MORPHEME:
+#                result.append("\u2400")
                 break
+#            elif best_character == Alphabet.END_OF_TRANSMISSION:
+#                result.append("\u2404")
             else:
                 result.append(best_character)
+            #print(f"best character at position {character_position} is {Alphabet.unicode_info(best_character)}", file=sys.stderr)
 
         return "".join(result)
 
@@ -324,10 +265,16 @@ class TensorProductRepresentation:
             shape=Shape(alphabet.dimension, character_roles.dimension)
         )
 
+        # Process characters in the actual morpheme
         for index, char in enumerate(characters):
             char_vector: Vector = alphabet.get_vector(char)  # OneHotVector(alphabet[char], alphabet.dimension)
             role_vector: Vector = character_roles[index]
+            result += char_vector.tensor_product(role_vector)
 
+        # Treat anything after the morpheme as being filled by Alphabet.END_OF_TRANSMISSION
+        char_vector = alphabet.get_vector(Alphabet.END_OF_TRANSMISSION)
+        for index in range(index+1, len(character_roles)):
+            role_vector: Vector = character_roles[index]
             result += char_vector.tensor_product(role_vector)
 
         return result
@@ -366,7 +313,9 @@ def main(
     morpheme_delimiter: str,
     input_file: str,
     output_file: str,
+    alphabet_out: str,
     verbose: int,
+    blacklist_char: str,
 ) -> None:
 
     import pickle
@@ -388,54 +337,8 @@ def main(
                         alphabet_set.add(character)
 
         except OSError as err:
-            print(
-                f"ERROR - failed to read alphabet file {alphabet_file}:\t{err}",
-                file=sys.stderr,
-            )
+            logging.error(f"ERROR - failed to read alphabet file {alphabet_file}:\t{err}")
             sys.exit(-1)
-
-    if (
-        len(alphabet_set) == 0 or not alphabet_file
-    ):  # Attempt to read alphabet symbols from input file
-        if input_file == "-":
-            print(
-                "ERROR - When reading from standard input, an alphabet file must be provided.",
-                file=sys.stderr,
-            )
-            sys.exit(-2)
-        else:
-            print(f"Reading alphabet from input file {input_file}...", file=sys.stderr)
-
-            with open(input_file) as input_source:
-                for line in input_source:
-                    for character in grapheme.graphemes(line.strip()):
-                        alphabet_set.add(character)
-
-    alphabet_set.add(end_of_morpheme_symbol)
-
-    for symbol in sorted(alphabet_set):
-        for character in symbol:
-            category = unicodedata.category(character)
-            if category[0] == "Z" and character != " ":
-                print(
-                    f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}",
-                    file=sys.stderr,
-                )
-            elif (
-                category[0] == "C"
-                and character != morpheme_delimiter
-                and character != end_of_morpheme_symbol
-            ):
-                print(
-                    f"WARNING - alphabet contains control character:\t{Alphabet.unicode_info(symbol)}",
-                    file=sys.stderr,
-                )
-
-    print(f"Symbols in alphabet: {len(alphabet_set)}", file=sys.stderr)
-    if verbose > 0:
-        print("-----------------------", file=sys.stderr)
-        for symbol in sorted(alphabet_set):
-            print(Alphabet.unicode_info(symbol), file=sys.stderr)
 
     with (sys.stdin if input_file == "-" else open(input_file)) as input_source:
 
@@ -447,34 +350,44 @@ def main(
 
             tpr: TensorProductRepresentation = TensorProductRepresentation(
                 alphabet=alphabet,
-                characters_dimension=characters_dimension,
-                morphemes_dimension=morphemes_dimension,
+                characters_dimension=characters_dimension
             )
 
             result: Dict[str, torch.Tensor] = {}
+            skipped_morphemes: Set[str] = set()
             for number, line in enumerate(input_source):
-                print(f"Processing line {number}\t{line.strip()}", file=sys.stderr)
+                logging.debug(f"Processing line {number}\t{line.strip()}")
                 for word in line.strip().split():
-                    if word not in result:
+                    if blacklist_char in word:
+                        logging.info(f"Skipping unanalyzed word {word}")
+                    elif word not in result:
                         for character in grapheme.graphemes(word):
-                            if character not in alphabet_set:
-                                print(
-                                    f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}",
-                                    file=sys.stderr,
-                                )
+                            if character not in alphabet_set and character != morpheme_delimiter and character != end_of_morpheme_symbol:
+                                logging.warning(f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}")
 
                         morphemes = word.split(morpheme_delimiter)
                         for morpheme in morphemes:
-                            try:
-                                tensor: Tensor = tpr.process_morpheme(morpheme)
-                                result[morpheme] = tensor.data
-                            except IndexError:
-                                print(f"WARNING - unable to process morpheme {morpheme} of {word}", file=sys.stderr)
+                            if len(morpheme) == 0:
+                                logging.debug(f"Line {number} - skipping morpheme of length 0 in word {word}")
+                            elif len(morpheme) == max_characters:
+                                logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} equals max length {max_characters}, and there is no space to insert the required end of morpheme symbol")
+                            elif len(morpheme) > max_characters:
+                                logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} exceeds max length {max_characters}")
+                            else:
+                                try:
+                                    tensor: Tensor = tpr.process_morpheme(morpheme)
+                                    result[morpheme] = tensor.data
+                                except IndexError:
+                                    logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}")
+                                    skipped_morphemes.add(morpheme)
 
-            print(f"Writing binary file to disk at {output}...", file=sys.stderr)
+            logging.info(f"Writing binary file containing {len(result)} morphemes to disk at {output}...")
+            with open(alphabet_out, 'wb') as afile:
+                pickle.dump(alphabet, afile)
             pickle.dump((result, alphabet._symbols), output)
-            print(f"...done writing binary file to disk at {output}", file=sys.stderr)
+            logging.info(f"...done writing binary file to disk at {output}", file=sys.stderr)
 
+            logging.info(f"Failed to process {len(skipped_morphemes)} morphemes:\n"+"\n".join(skipped_morphemes))
 
 if __name__ == "__main__":
 
@@ -542,6 +455,14 @@ if __name__ == "__main__":
         help="Input file containing whitespace delimited words (- for standard input)",
     )
     arg_parser.add_argument(
+        "--blacklist_char",
+        metavar="filename",
+        type=str,
+        nargs="?",
+        default="*",
+        help="Character that marks unanalyzed words that should be ignored",
+    )
+    arg_parser.add_argument(
         "-o",
         "--output_file",
         metavar="filename",
@@ -549,6 +470,13 @@ if __name__ == "__main__":
         nargs="?",
         required=True,
         help="Output file where morpheme tensors are recorded",
+    )
+    arg_parser.add_argument(
+        "--alphabet_output",
+        type=str,
+        nargs="?",
+        required=True,
+        help="output file for alphabet object"
     )
     arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
 
@@ -564,5 +492,7 @@ if __name__ == "__main__":
         morpheme_delimiter=str.encode(args.morpheme_delimiter).decode("unicode_escape"),
         input_file=args.input_file,
         output_file=args.output_file,
+        alphabet_out=args.alphabet_output,
         verbose=args.verbose,
+        blacklist_char=args.blacklist_char
     )
