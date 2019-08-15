@@ -1,12 +1,13 @@
 #!/usr/bin/env python3.7
 
+from iiksiin import Alphabet, Dimension
 import grapheme # type: ignore
 import logging
 import sys
 from typing import Mapping, Set, Iterable, Iterator
 import unicodedata
 
-"""Implements a character alphabet for use in the 
+"""Constructs a character alphabet for use in the 
 Tensor Product Representation for potentially multi-morphemic words.
 
 This file was developed as part of the Neural Polysynthetic Language Modelling project
@@ -31,99 +32,6 @@ __status__ = "Prototype"
 
 if sys.version_info < (3, 7):
     raise RuntimeError(f"{__file__} requires Python 3.7 or later")
-
-
-class Alphabet:
-
-    END_OF_MORPHEME: str = "\u0000"
-    END_OF_TRANSMISSION: str = "\u0004"
-
-    def __init__(self, name: str, symbols: Set[str]):
-        alphabet_symbols = set(symbols)
-        alphabet_symbols.add(Alphabet.END_OF_MORPHEME)
-        alphabet_symbols.add(Alphabet.END_OF_TRANSMISSION)
-        self._symbols: Mapping[str, int] = {
-            symbol: index for (index, symbol) in enumerate(sorted(alphabet_symbols), start=1)
-        }
-        from iiksiin import Dimension
-        self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
-        self.name = name
-        self.oov = 0
-        self._vector: List[Vector] = list()
-        for i in range(len(self.dimension)):
-            self._vector.append(OneHotVector(i, self.dimension))
-
-    def get_vector(self, symbol: str) -> "Vector":
-        index: int = self[symbol]
-        return self._vector[index]
-
-    def number_of_symbols(self) -> int:
-        return len(self._symbols)
-    
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._symbols.keys())
-
-    def __getitem__(self, symbol: str) -> int:
-        if symbol in self._symbols:
-            return self._symbols[symbol]
-        else:
-            return self.oov
-
-    def __str__(self) -> str:
-        return self.name
-
-    def __repr__(self) -> str:
-        return f"Alphabet({str(self.dimension)})"
-
-    @staticmethod
-    def char_to_code_point(c: str) -> str:
-        x_hex_string: str = hex(ord(c))  # a string of the form "0x95" or "0x2025"
-        hex_string: str = x_hex_string[2:]  # a string of the form "95" or "2025"
-        required_zero_padding = max(0, 4 - len(hex_string))
-        return (
-            f"U+{required_zero_padding * '0'}{hex_string}"
-        )  # a string of the form "\\u0095" or "\\u2025"
-
-    @staticmethod
-    def char_to_name(c: str) -> str:
-        try:
-            return unicodedata.name(c)
-        except ValueError:
-            return ""
-
-    @staticmethod
-    def unicode_info(s: str) -> str:
-        return (
-            s
-            + "\t"
-            + "; ".join(
-                [
-                    f"{Alphabet.char_to_code_point(c)} {Alphabet.char_to_name(c)}"
-                    for c in s
-                ]
-            )
-        )
-
-    @staticmethod
-    def create_from_source(name: str, source: Iterable[str], morpheme_delimiter: str, end_of_morpheme_symbol: str, blacklist_char: str) -> "Alphabet":
-        for line in source:
-            for character in grapheme.graphemes(line.strip()):
-                category = unicodedata.category(character)
-                if category[0] != "Z" and category[0] != "C" and character != morpheme_delimiter and character != end_of_morpheme_symbol and character != blacklist_char:
-                    alphabet_set.add(character)
-
-        alphabet_set.add(end_of_morpheme_symbol)
-
-        for symbol in alphabet_set:
-            for character in symbol:
-                category = unicodedata.category(character)
-                if category[0] == "Z":
-                    logging.warning(f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}")
-
-                elif (category[0] == "C" and character != morpheme_delimiter and character != end_of_morpheme_symbol):
-                    logging.warning(f"WARNING - alphabet contains control character:\t{Alphabet.unicode_info(symbol)}")
-
-        return Alphabet(name, alphabet_set)
 
     
 def main(name: str, input_source: Iterable[str], output_filename: str, log_filename: str, morpheme_delimiter: str, end_of_morpheme_symbol: str, blacklist_char: str) -> None:
