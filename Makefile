@@ -1,25 +1,28 @@
 SHELL := /bin/bash
 
-%.trained_model: %.tensors
-	source /opt/python/3.7/venv/pytorch1.0_cuda10.0/bin/activate && ./autoencoder.py --mode train --tensor_file $< --output_file $@ --cuda_device 1 --batch_size 100 --epochs 200 --hidden_layer_size 200 --learning_rate 0.01 --hidden_layers 1
+VENV=/opt/python/3.7/venv/pytorch1.0_cuda10.0
 
+%.trained_model: %.tensors
+	source ${VENV}/bin/activate && python3 autoencoder.py --mode train --tensor_file $*.tensors --output_file $@ --cuda_device 1 --batch_size 100 --epochs 200 --hidden_layer_size 64 --learning_rate 0.01 --hidden_layers 1
 
 %.tensors: %.txt
-	source /opt/python/3.7/venv/pytorch1.0_cuda10.0/bin/activate && python3 iiksiin.py -d ">" -i $< -o $@
+	source ${VENV}/bin/activate && python3 iiksiin.py -d "^" -i $< -o $@ -c 23 --alphabet_output ess.alphabet
 
 %.vectors: %.trained_model %.tensors
-	source /opt/python/3.7/venv/pytorch1.0_cuda10.0/bin/activate && ./autoencoder.py --mode t2v --tensor_file $*.tensors --model_file $*.trained_model --cuda_device 1 --batch_size 100 --output_file $@
+	source ${VENV}/bin/activate && python3 autoencoder.py --mode t2v --tensor_file $*.tensors --model_file $*.trained_model --cuda_device 1 --batch_size 100 --output_file $@
 
 %.test: %.trained_model %.tensors %.vectors
-	source /opt/python/3.7/venv/pytorch1.0_cuda10.0/bin/activate && ./autoencoder.py --mode v2s --tensor_file $*.tensors --model_file $*.trained_model --vector_file $*.vectors --cuda_device 1 --batch_size 100 --output_file $@
-#source /opt/python/3.7/venv/pytorch1.0_cuda10.0/bin/activate && ./autoencoder.py --mode tv2s --tensor_file $*.tensors --model_file $*.trained_model --cuda_device 1 --batch_size 100 --output_file $@ > $@
+	source ${VENV}/bin/activate && python3 autoencoder.py --mode v2s --tensor_file $*.tensors --model_file $*.trained_model --vector_file $*.vectors --batch_size 100 --output_file $@ --cuda_device 1
+#source ${VENV}/bin/activate && ./autoencoder.py --mode tv2s --tensor_file $*.tensors --model_file $*.trained_model --cuda_device 1 --batch_size 100 --output_file $@ > $@
 
 %.clean:
 	rm -f $*.trained_model $*.tensors $*.test
 
+ess.morpheme_info.pickle: finite_state_morphology/lexicon/lexicon.py finite_state_morphology/ess.lexc
+	source ${VENV}/bin/activate && python3 finite_state_morphology/lexicon/lexicon.py --mode l2p --lexc finite_state_morphology/ess.lexc --output ess.morpheme_info.pickle
 
 .PRECIOUS: %.tensors %.test %.trained_model
 .PHONY: %.clean always
 
 always:
-	source /opt/python/3.7/venv/pytorch1.0_cuda10.0/bin/activate && ./autoencoder.py --mode t2v --tensor_file grn.tensors --model_file grn.trained_model --cuda_device 1 --batch_size 100 --output_file always.vectors
+	source ${VENV}/bin/activate && ./autoencoder.py --mode t2v --tensor_file grn.tensors --model_file grn.trained_model --cuda_device 1 --batch_size 100 --output_file always.vectors
