@@ -3,8 +3,9 @@
 from iiksiin import Alphabet, Dimension
 import grapheme # type: ignore
 import logging
+import pickle
 import sys
-from typing import Mapping, Set, Iterable, Iterator
+from typing import List, Mapping, Set, Iterable, Iterator
 import unicodedata
 
 """Constructs a character alphabet for use in the 
@@ -124,9 +125,9 @@ if __name__ == "__main__":
 
     main(
         name=args.description,
-        input_source=open(args.input_file) if args.input != "-" else sys.stdin,
+        input_source=open(args.input_file) if args.input_file != "-" else sys.stdin,
         output_filename=args.output_file,
-        log_filename_file=args.log,
+        log_filename=args.log,
         morpheme_delimiter=str.encode(args.morpheme_delimiter).decode("unicode_escape"),
         end_of_morpheme_symbol=str.encode(args.end_of_morpheme_symbol).decode("unicode_escape"),
         blacklist_char=args.blacklist_char
