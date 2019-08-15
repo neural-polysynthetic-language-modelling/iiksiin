@@ -23,3 +23,7 @@ finite_state_morphology/
 *.tsv
 log
 *.vocab
+frustrated.sh
+sanity.py
+dummy.py
+runc2m.sh
