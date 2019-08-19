@@ -42,7 +42,7 @@ def main(name: str, input_source: Iterable[str], output_filename: str, log_filen
     with open(log_filename, "wt") as log:
         print(f"Symbols in alphabet: {alphabet.number_of_symbols()}", file=log)
         print("-----------------------", file=log)
-        print(f"0\t\tThe integer value 0 is reserved to represent any symbol not in the alphabet")
+        print(f"0\t\tThe integer value 0 is reserved to represent any symbol not in the alphabet", file=log)
         for symbol in sorted(iter(alphabet)):
             message=f"{alphabet[symbol]}\t{Alphabet.unicode_info(symbol)}"
             if symbol==alphabet.end_of_morpheme_symbol:
