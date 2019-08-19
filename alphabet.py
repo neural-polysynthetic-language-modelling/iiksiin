@@ -35,9 +35,9 @@ if sys.version_info < (3, 7):
     raise RuntimeError(f"{__file__} requires Python 3.7 or later")
 
     
-def main(name: str, input_source: Iterable[str], output_filename: str, log_filename: str, morpheme_delimiter: str, end_of_morpheme_symbol: str, blacklist_char: str) -> None:
+def main(name: str, input_source: Iterable[str], output_filename: str, log_filename: str, morpheme_delimiter: str, end_of_morpheme_symbol: str, padding_symbol: str, blacklist_char: str) -> None:
 
-    alphabet: Alphabet = Alphabet.create_from_source(name, input_source, morpheme_delimiter, end_of_morpheme_symbol, blacklist_char)
+    alphabet: Alphabet = Alphabet.create_from_source(name, input_source, morpheme_delimiter, end_of_morpheme_symbol, padding_symbol, blacklist_char)
 
     with open(log_filename, "wt") as log:
         print(f"Symbols in alphabet: {alphabet.number_of_symbols()}", file=log)
@@ -87,6 +87,16 @@ if __name__ == "__main__":
         + "This symbol must not appear in the alphabet",
     )
     arg_parser.add_argument(
+        "-p",
+        "--padding_symbol",
+        metavar="character",
+        type=str,
+        nargs="?",
+        default="\\u0004",
+        help="This character will be used when padding is needed in a tensor. "
+        + "This symbol must not appear in the alphabet",
+    )
+    arg_parser.add_argument(
         "-i",
         "--input_file",
         metavar="filename",
@@ -130,5 +140,6 @@ if __name__ == "__main__":
         log_filename=args.log,
         morpheme_delimiter=str.encode(args.morpheme_delimiter).decode("unicode_escape"),
         end_of_morpheme_symbol=str.encode(args.end_of_morpheme_symbol).decode("unicode_escape"),
+        padding_symbol=str.encode(args.padding_symbol).decode("unicode_escape"),
         blacklist_char=args.blacklist_char
     )

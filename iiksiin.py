@@ -3,7 +3,7 @@ import gzip
 import logging
 import torch     # type: ignore
 import sys
-from typing import Dict, List, Callable, Tuple, Set, Mapping, Iterable, Iterator
+from typing import Any, Dict, List, Callable, Tuple, Set, Mapping, Iterable, Iterator
 import unicodedata
 
 """Implements Tensor Product Representation for potentially multi-morphemic words.
@@ -33,19 +33,27 @@ if sys.version_info < (3, 7):
 
 class Alphabet:
 
-    END_OF_MORPHEME: str = "\u0000"
-    END_OF_TRANSMISSION: str = "\u0004"
+    def __init__(self, name: str, symbols: Set[str], end_of_morpheme_symbol: str = "\u0000", padding_symbol: str = "\u0004"):
+        if end_of_morpheme in symbols or padding_symbol in symbols:
+            raise ValueError(f"The end_of_morpheme symbol and padding_symbol may not be in the set of provided symbols.")
 
-    def __init__(self, name: str, symbols: Set[str]):
-        alphabet_symbols = set(symbols)
-        alphabet_symbols.add(Alphabet.END_OF_MORPHEME)
-        alphabet_symbols.add(Alphabet.END_OF_TRANSMISSION)
-        self._symbols: Mapping[str, int] = {
-            symbol: index for (index, symbol) in enumerate(sorted(alphabet_symbols), start=1)
-        }
-        self.dimension: Dimension = Dimension(name, 1 + len(alphabet_symbols))
-        self.name = name
+        self._symbols: Mapping[str, int] = dict()
+
+        # The value self.oov (in the context of self._symbols) is reserved for all out-of-alphabet symbols
         self.oov = 0
+        
+        self.end_of_morpheme_symbol = end_of_morpheme_symbol
+        self._symbols[self.end_of_morpheme_symbol] = 1
+        
+        self.padding_symbol = padding_symbol
+        self.symbols[self.padding_symbol] = 2
+
+        for (index, symbol) in enumerate(sorted(symbols), start=3):
+            self._symbols[symbol] = index
+        
+        self.dimension: Dimension = Dimension(name, 1 + len(symbols))
+        self.name = name
+
         self._vector: List[Vector] = list()
         for i in range(len(self.dimension)):
             self._vector.append(OneHotVector(i, self.dimension))
@@ -66,6 +74,12 @@ class Alphabet:
         else:
             return self.oov
 
+    def __contains__(self, item: Any) -> bool:
+        if item in self._symbols:
+            return True
+        else:
+            return False
+        
     def __str__(self) -> str:
         return self.name
 
@@ -102,7 +116,7 @@ class Alphabet:
         )
 
     @staticmethod
-    def create_from_source(name: str, source: Iterable[str], morpheme_delimiter: str, end_of_morpheme_symbol: str, blacklist_char: str) -> "Alphabet":
+    def create_from_source(name: str, source: Iterable[str], morpheme_delimiter: str, end_of_morpheme_symbol: str, padding_symbol: str, blacklist_char: str) -> "Alphabet":
         alphabet_set: Set[str] = set()
         for line in source: # type: str
             for character in grapheme.graphemes(line.strip()): # type: str
@@ -121,7 +135,10 @@ class Alphabet:
                 elif (category[0] == "C" and character != morpheme_delimiter and character != end_of_morpheme_symbol):
                     logging.warning(f"WARNING - alphabet contains control character:\t{Alphabet.unicode_info(symbol)}")
 
-        return Alphabet(name, alphabet_set)
+        return Alphabet(name=name,
+                        symbols=alphabet_set,
+                        end_of_morpheme_symbol=end_of_morpheme_symbol,
+                        padding_symbol=padding_symbol)
 
 
 class Dimension:
@@ -274,7 +291,7 @@ class TensorProductRepresentation:
 #        )
 
     @staticmethod
-    def extract_surface_form(alphabet: Mapping[str, int],
+    def extract_surface_form(alphabet: Alphabet,
                              morpheme_tensor: torch.Tensor,
                              max_chars_per_morpheme: int = 20) -> str:
 
@@ -404,7 +421,6 @@ def main(
     morpheme_delimiter: str,
     input_file: str,
     output_file: str,
-    alphabet_out: str,
     verbose: int,
     blacklist_char: str,
 ) -> None:
@@ -417,25 +433,14 @@ def main(
             + "(see Unicode Standard Annex #29)."
         )
 
-    alphabet_set: Set[str] = set()
-    if (
-        alphabet_file
-    ):  # If user provided a file containing alphabet symbols, attempt to use it
-        try:
-            with open(alphabet_file, "r") as alphabet_source:
-                for line in alphabet_source:
-                    for character in grapheme.graphemes(line.strip()):
-                        alphabet_set.add(character)
-
-        except OSError as err:
-            logging.error(f"ERROR - failed to read alphabet file {alphabet_file}:\t{err}")
-            sys.exit(-1)
+    
+    with open(alphabet_file, "rb") as f:
+        alphabet: Alphabet = pickle.load(f)
 
     with (sys.stdin if input_file == "-" else open(input_file)) as input_source:
 
         with gzip.open(output_file, "wb") as output:
 
-            alphabet: Alphabet = Alphabet("alphabet", alphabet_set)
             characters_dimension: Dimension = Dimension("characters", max_characters)
             morphemes_dimension: Dimension = Dimension("morphemes", max_morphemes)
 
@@ -453,7 +458,7 @@ def main(
                         logging.info(f"Skipping unanalyzed word {word}")
                     elif word not in result:
                         for character in grapheme.graphemes(word):
-                            if character not in alphabet_set and character != morpheme_delimiter and character != end_of_morpheme_symbol:
+                            if character not in alphabet and character != morpheme_delimiter and character != end_of_morpheme_symbol:
                                 logging.warning(f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}")
 
                         morphemes = word.split(morpheme_delimiter)
@@ -473,9 +478,7 @@ def main(
                                     skipped_morphemes.add(morpheme)
 
             logging.info(f"Writing binary file containing {len(result)} morphemes to disk at {output}...")
-            with open(alphabet_out, 'wb') as afile:
-                pickle.dump(alphabet, afile)
-            pickle.dump((result, alphabet._symbols), output)
+            pickle.dump(result, output)
             logging.info(f"...done writing binary file to disk at {output}", file=sys.stderr)
 
             logging.info(f"Failed to process {len(skipped_morphemes)} morphemes:\n"+"\n".join(skipped_morphemes))
@@ -510,20 +513,8 @@ if __name__ == "__main__":
         "--alphabet",
         metavar="filename",
         type=str,
-        nargs="?",
-        help="File containing alphabet of characters "
-        + "(Unicode escapes of the form \\u2017 are allowed.",
-    )
-    arg_parser.add_argument(
-        "-e",
-        "--end_of_morpheme_symbol",
-        metavar="character",
-        type=str,
-        nargs="?",
-        default="\\u0000",
-        help="In this output tensor representation, "
-        + "this character will be appended as the final symbol in every morpheme. "
-        + "This symbol must not appear in the alphabet",
+        required=True,
+        help="Python pickle file containing an Alphabet object"
     )
     arg_parser.add_argument(
         "-d",
@@ -531,7 +522,7 @@ if __name__ == "__main__":
         metavar="string",
         type=str,
         nargs="?",
-        default="\\u001F",
+        required=True,
         help="In the user-provided input file, "
         + "this character must appear between adjacent morphemes. "
         + "This symbol must not appear in the alphabet",
@@ -562,13 +553,6 @@ if __name__ == "__main__":
         required=True,
         help="Output file where morpheme tensors are recorded",
     )
-    arg_parser.add_argument(
-        "--alphabet_output",
-        type=str,
-        nargs="?",
-        required=True,
-        help="output file for alphabet object"
-    )
     arg_parser.add_argument("-v", "--verbose", metavar="int", type=int, default=0)
 
     args = arg_parser.parse_args()
@@ -576,14 +560,13 @@ if __name__ == "__main__":
     main(
         max_characters=args.max_characters,
         max_morphemes=args.max_morphemes,
-        alphabet_file=(args.alphabet if args.alphabet else ""),
+        alphabet_file=args.alphabet,
         end_of_morpheme_symbol=str.encode(args.end_of_morpheme_symbol).decode(
             "unicode_escape"
         ),
         morpheme_delimiter=str.encode(args.morpheme_delimiter).decode("unicode_escape"),
         input_file=args.input_file,
         output_file=args.output_file,
-        alphabet_out=args.alphabet_output,
         verbose=args.verbose,
         blacklist_char=args.blacklist_char
     )
