@@ -2,6 +2,9 @@ SHELL := /bin/bash
 
 VENV=/opt/python/3.7/venv/pytorch1.0_cuda10.0
 
+%.alphabet: %.txt
+	source ${VENV}/bin/activate && python3 alphabet.py --description $* --morpheme_delimiter ">" --end_of_morpheme_symbol '\u0000' --input_file $< --blacklist_char '*' --output_file $@ --log $@.log
+
 %.trained_model: %.tensors
 	source ${VENV}/bin/activate && python3 autoencoder.py --mode train --tensor_file $*.tensors --output_file $@ --cuda_device 1 --batch_size 100 --epochs 200 --hidden_layer_size 64 --learning_rate 0.01 --hidden_layers 1
 
