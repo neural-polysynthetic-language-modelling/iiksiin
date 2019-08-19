@@ -34,8 +34,15 @@ if sys.version_info < (3, 7):
 class Alphabet:
 
     def __init__(self, name: str, symbols: Set[str], end_of_morpheme_symbol: str = "\u0000", padding_symbol: str = "\u0004"):
-        if end_of_morpheme_symbol in symbols or padding_symbol in symbols or end_of_morpheme_symbol==padding_symbol:
-            raise ValueError(f"The end_of_morpheme symbol and padding_symbol must not be the same, and may not be in the set of provided symbols.")
+        constructor_errors: List[str] = list()
+        if end_of_morpheme_symbol in symbols:
+            constructor_errors.append(f"The end-of-morpheme symbol ({Alphabet.unicode_info(end_of_morpheme_symbol)}) must not be in the provided set of symbols")
+        if padding_symbol in symbols:
+            constructor_errors.append(f"The padding symbol ({Alphabet.unicode_info(padding_symbol)})  must not be in the provided set of symbols.")
+        if end_of_morpheme_symbol==padding_symbol:
+            constructor_errors.append(f"The end-of-morpheme symbol ({Alphabet.unicode_info(end_of_morpheme_symbol)}) and the padding symbol ({Alphabet.unicode_info(padding_symbol)}) must not be the same.")
+        if constructor_errors:
+            raise ValueError(" ".join(constructor_errors))
 
         self._symbols: Mapping[str, int] = dict()
 
