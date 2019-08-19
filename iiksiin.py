@@ -103,17 +103,18 @@ class Alphabet:
 
     @staticmethod
     def create_from_source(name: str, source: Iterable[str], morpheme_delimiter: str, end_of_morpheme_symbol: str, blacklist_char: str) -> "Alphabet":
-        for line in source:
-            for character in grapheme.graphemes(line.strip()):
-                category = unicodedata.category(character)
+        alphabet_set: Set[str] = set()
+        for line in source: # type: str
+            for character in grapheme.graphemes(line.strip()): # type: str
+                category: str = unicodedata.category(character)
                 if category[0] != "Z" and category[0] != "C" and character != morpheme_delimiter and character != end_of_morpheme_symbol and character != blacklist_char:
                     alphabet_set.add(character)
 
         alphabet_set.add(end_of_morpheme_symbol)
 
-        for symbol in alphabet_set:
-            for character in symbol:
-                category = unicodedata.category(character)
+        for symbol in alphabet_set: # type: str
+            for character in symbol: # type: str
+                category: str = unicodedata.category(character)
                 if category[0] == "Z":
                     logging.warning(f"WARNING - alphabet contains whitespace character:\t{Alphabet.unicode_info(symbol)}")
 
