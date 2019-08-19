@@ -42,8 +42,14 @@ def main(name: str, input_source: Iterable[str], output_filename: str, log_filen
     with open(log_filename, "wt") as log:
         print(f"Symbols in alphabet: {alphabet.number_of_symbols()}", file=log)
         print("-----------------------", file=log)
+        print(f"0\t\t{The integer value 0 is reserved to represent any symbol not in the alphabet}")
         for symbol in sorted(iter(alphabet)):
-            print(Alphabet.unicode_info(symbol), file=log)
+            message=f"{alphabet[symbol]}\t{Alphabet.unicode_info(symbol)}"
+            if symbol==alphabet.end_of_morpheme_symbol:
+                message += "End-of-morpheme symbol"
+            if symbol==alphabet.padding_symbol:
+                message += "Padding symbol"
+            print(message, file=log)
     
     logging.info(f"Writing alphabet object as pickle to {output_filename}")
     with open(output_filename, "wb") as output:

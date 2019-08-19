@@ -34,8 +34,8 @@ if sys.version_info < (3, 7):
 class Alphabet:
 
     def __init__(self, name: str, symbols: Set[str], end_of_morpheme_symbol: str = "\u0000", padding_symbol: str = "\u0004"):
-        if end_of_morpheme in symbols or padding_symbol in symbols:
-            raise ValueError(f"The end_of_morpheme symbol and padding_symbol may not be in the set of provided symbols.")
+        if end_of_morpheme_symbol in symbols or padding_symbol in symbols or end_of_morpheme_symbol==padding_symbol:
+            raise ValueError(f"The end_of_morpheme symbol and padding_symbol must not be the same, and may not be in the set of provided symbols.")
 
         self._symbols: Mapping[str, int] = dict()
 
@@ -338,7 +338,7 @@ class TensorProductRepresentation:
                     best_distance = distance
                   #  print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
 
-            if best_character == Alphabet.END_OF_MORPHEME:
+            if best_character == alphabet.end_of_morpheme_symbol:
 #                result.append("\u2400")
                 break
 #            elif best_character == Alphabet.END_OF_TRANSMISSION:
@@ -351,7 +351,7 @@ class TensorProductRepresentation:
 
     def process_morpheme(self, morpheme: Iterable[str]) -> Tensor:
         return TensorProductRepresentation.process_characters_in_morpheme(
-            characters=list(morpheme) + [Alphabet.END_OF_MORPHEME],
+            characters=list(morpheme) + [alphabet.end_of_morpheme_symbol],
             alphabet=self.alphabet,
             character_roles=self.character_roles
         )
@@ -379,8 +379,8 @@ class TensorProductRepresentation:
             role_vector: Vector = character_roles[index]
             result += char_vector.tensor_product(role_vector)
 
-        # Treat anything after the morpheme as being filled by Alphabet.END_OF_TRANSMISSION
-        char_vector = alphabet.get_vector(Alphabet.END_OF_TRANSMISSION)
+        # Treat anything after the morpheme as being filled by alphabet.padding_symbol
+        char_vector = alphabet.get_vector(alphabet.padding_symbol)
         for index in range(index+1, len(character_roles)):
             role_vector: Vector = character_roles[index]
             result += char_vector.tensor_product(role_vector)
