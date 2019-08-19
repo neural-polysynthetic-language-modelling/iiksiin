@@ -53,7 +53,7 @@ class Alphabet:
         self._symbols[self.end_of_morpheme_symbol] = 1
         
         self.padding_symbol = padding_symbol
-        self.symbols[self.padding_symbol] = 2
+        self._symbols[self.padding_symbol] = 2
 
         for (index, symbol) in enumerate(sorted(symbols), start=3):
             self._symbols[symbol] = index
