@@ -131,8 +131,6 @@ class Alphabet:
                 if category[0] != "Z" and category[0] != "C" and character != morpheme_delimiter and character != end_of_morpheme_symbol and character != blacklist_char:
                     alphabet_set.add(character)
 
-        alphabet_set.add(end_of_morpheme_symbol)
-
         for symbol in alphabet_set: # type: str
             for character in symbol: # type: str
                 category: str = unicodedata.category(character)
