@@ -80,16 +80,18 @@ class Tensors:
         return next(iter(self.tensor_dict.values())).shape
 
     @staticmethod
-    def load_from_pickle_file(tensor_file: str) -> "Tensors":
+    def load_from_pickle_file(tensor_filename: str, alphabet_filename: str) -> "Tensors":
         import pickle
         import gzip
 
-        with gzip.open(tensor_file) as f:
-            result: Tuple[Dict[str, torch.Tensor], Alphabet] = pickle.load(
-                f, encoding="utf8"
-            )
-            tensor_dict: Dict[str, torch.Tensor] = result[0]
-            alphabet: Alphabet = result[1]
+        with gzip.open(tensor_file) as tensor_file, open(alphabet_filename) as alphabet_file:
+#            result: Tuple[Dict[str, torch.Tensor], Alphabet] = pickle.load(
+#                f, encoding="utf8"
+#            )
+#            tensor_dict: Dict[str, torch.Tensor] = result[0]
+#            alphabet: Alphabet = result[1]
+            tensor_dict: Dict[str, torch.Tensor] = pickle.load(tensor_file, encoding='utf8')
+            alphabet: Alphabet = pickle.load(alphabet_file, encoding='utf8')
             # (tensor_dict, alphabet:Alphabet) = pickle.load(f, encoding='utf8')
             return Tensors(tensor_dict, alphabet)
 
@@ -427,7 +429,7 @@ def main():
             f"Training autoencoder using tensors in {args.tensor_file} as training data"
         )
 
-        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
+        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file, args.alphabet)
 
         model: Autoencoder = Autoencoder(
             input_dimension_size=data.input_dimension_size,
