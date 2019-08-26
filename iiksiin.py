@@ -58,7 +58,7 @@ class Alphabet:
         for (index, symbol) in enumerate(sorted(symbols), start=3):
             self._symbols[symbol] = index
         
-        self.dimension: Dimension = Dimension(name, 1 + len(symbols))
+        self.dimension: Dimension = Dimension(name, 1 + len(self._symbols))
         self.name = name
 
         self._vector: List[Vector] = list()
