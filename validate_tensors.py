@@ -61,7 +61,7 @@ def main(
             if morpheme!=reconstructed_surface_form:
                 success = False
             
-            print(f"{morpheme}\t{reconstructed_surface_form}\t{morpheme==reconstructed_surface_form}", file=output_file)
+            print(f"{morpheme}\t{reconstructed_surface_form}\t{morpheme==reconstructed_surface_form}", file=output)
 
         return success
 
