@@ -7,6 +7,7 @@ import torch     # type: ignore
 import sys
 from typing import Dict, List, Callable, Tuple, Set, Mapping, Iterable, Iterator
 import unicodedata
+from iiksiin import *
 
 """Implements Tensor Product Representation for potentially multi-morphemic words.
 
