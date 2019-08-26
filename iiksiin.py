@@ -485,7 +485,7 @@ def main(
                                     result[morpheme] = tensor.data
                                 except (IndexError, AssertionError) as e:
                                     if isinstance(e, IndexError):
-                                        logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}")
+                                        logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}" + "\t" + str(e))
                                     elif isinstance(e, AssertionError):
                                         logging.warning(f"Line {number} - unable to reconstruct morpheme {morpheme} (length {len(morpheme)}) of {word} from tensor representation")
                                     
