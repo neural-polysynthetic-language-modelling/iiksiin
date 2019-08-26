@@ -84,7 +84,7 @@ class Tensors:
         import pickle
         import gzip
 
-        with gzip.open(tensor_file) as tensor_file, open(alphabet_filename) as alphabet_file:
+        with gzip.open(tensor_filename) as tensor_file, open(alphabet_filename) as alphabet_file:
 #            result: Tuple[Dict[str, torch.Tensor], Alphabet] = pickle.load(
 #                f, encoding="utf8"
 #            )
