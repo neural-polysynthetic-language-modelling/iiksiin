@@ -313,14 +313,14 @@ class TensorProductRepresentation:
             """This means that the final dimension of data and the only dimension of role are the same size.
                We will be summing over that dimension."""
 
-            print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
-            print(f"character_position_role.shape is {character_position_role.shape}")
+#            print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
+#            print(f"character_position_role.shape is {character_position_role.shape}")
 
             vector_for_current_character: torch.Tensor = torch.einsum(
                 equation_in_einstein_notation, [morpheme_tensor.cpu(), character_position_role.cpu()]
             )
-            print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
-            print(f"vector for position {character_position}:\t{vector_for_current_character}")
+#            print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
+#            print(f"vector for position {character_position}:\t{vector_for_current_character}")
             best_character = None
             best_distance = float("inf")
 
