@@ -42,17 +42,9 @@ def main(
 
     import pickle
 
-    if grapheme.length(end_of_morpheme_symbol) != 1:
-        raise RuntimeError(
-            "The end of morpheme symbol must consist of a single grapheme cluster "
-            + "(see Unicode Standard Annex #29)."
-        )
-
     success = True
     
-    with gzip.open(input_file, "rb") as input_source,
-         open(alphabet_file, "rb") as alphabet_file,
-         open(output_file, "wt") as output:
+    with gzip.open(input_file, "rb") as input_source, open(alphabet_file, "rb") as alphabet_file, open(output_file, "wt") as output:
 
         alphabet: Alphabet = pickle.load(alphabet_file)
 
