@@ -583,7 +583,7 @@ def main():
             f"using previously trained model {args.model_file}"
         )
 
-        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file)
+        data: Tensors = Tensors.load_from_pickle_file(args.tensor_file, args.alphabet)
 
         model: Autoencoder = torch.load(args.model_file)
 
