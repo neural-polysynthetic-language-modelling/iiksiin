@@ -284,6 +284,14 @@ def program_arguments():
         description="Autoencode tensor product representations of each morpheme."
     )
     arg_parser.add_argument(
+        "-a",
+        "--alphabet",
+        metavar="filename",
+        type=str,
+        required=True,
+        help="Python pickle file containing an Alphabet object"
+    )
+    arg_parser.add_argument(
         "--epochs",
         type=int,
         default=200,
