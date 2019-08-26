@@ -295,9 +295,9 @@ class TensorProductRepresentation:
 #            morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
 #        )
 
-    def __str__(self):
+    def reconstruct_string(self, tensor: Tensor):
         return TensorProductRepresentation.extract_surface_form(alphabet=self.alphabet,
-                                                                morpheme_tensor=self.data,
+                                                                morpheme_tensor=tensor.data,
                                                                 max_chars_per_morpheme=len(self.character_roles))
 
     @staticmethod
@@ -484,9 +484,9 @@ def main(
                                 try:
                                     tensor: Tensor = tpr.process_morpheme(morpheme)
                                     if validate_tensors:
-                                        reconstructed_surface_form = str(tensor) #TensorProductRepresentation.extract_surface_form(alphabet=alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=max_characters)
+                                        reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=tpr.alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=len(tpr.character_roles))
                                         
-                                        logging.warning(f"{morpheme}\t{reconstructed_surface_form}")
+                                        logging.warning(f"Reconstruction attempt\t{morpheme}\t{reconstructed_surface_form}")
                                         assert(reconstructed_surface_form == morpheme)
                                     result[morpheme] = tensor.data
                                 except (IndexError, AssertionError) as e:
