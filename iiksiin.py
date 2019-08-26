@@ -71,6 +71,9 @@ class Alphabet:
 
     def number_of_symbols(self) -> int:
         return len(self._symbols)
+
+    def __len__(self) -> int:
+        return 1 + len(self._symbols)
     
     def __iter__(self) -> Iterator[str]:
         return iter(self._symbols.keys())
