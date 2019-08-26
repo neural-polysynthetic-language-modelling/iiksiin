@@ -552,7 +552,7 @@ def main():
             f"Processing {len(vectors)} vectors through autoencoder output layer..."
         )
         status = 0
-        with open(args.output_file, "w") as output_file:
+        with open(args.output_file, "wt") as output_file:
             for key_value_tuple in vectors.items():
                 status += 1
                 expected: str = key_value_tuple[0]
@@ -571,6 +571,7 @@ def main():
                     alphabet=tensors.alphabet, morpheme_tensor=tensor
                 )
                 print(f"{expected==actual}\t{expected}\t{actual}", file=output_file)
+                output_file.flush()
                 logging.info(f"Completed morpheme {status} of {len(vectors)}")
 
     elif args.mode == "t2v" and args.model_file and args.tensor_file:
