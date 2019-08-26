@@ -295,11 +295,6 @@ class TensorProductRepresentation:
 #            morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
 #        )
 
-    def reconstruct_string(self, tensor: Tensor):
-        return TensorProductRepresentation.extract_surface_form(alphabet=self.alphabet,
-                                                                morpheme_tensor=tensor.data,
-                                                                max_chars_per_morpheme=len(self.character_roles))
-
     @staticmethod
     def extract_surface_form(alphabet: Alphabet,
                              morpheme_tensor: torch.Tensor,
@@ -496,6 +491,7 @@ def main(
                                         logging.warning(f"Line {number} - unable to reconstruct morpheme {morpheme} (length {len(morpheme)}) of {word} from tensor representation")
                                     
                                     skipped_morphemes.add(morpheme)
+                                    raise e
 
             logging.info(f"Writing binary file containing {len(result)} morphemes to disk at {output}...")
             pickle.dump(result, output)
