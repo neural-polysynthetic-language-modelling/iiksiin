@@ -373,7 +373,7 @@ def program_arguments():
 class UnbindingLoss(torch.nn.modules.loss._Loss):
     def __init__(
         self,
-        alphabet: Mapping[str, int],
+        alphabet: Alphabet,
         weight=None,
         size_average=None,
         ignore_index=-100,
@@ -386,12 +386,12 @@ class UnbindingLoss(torch.nn.modules.loss._Loss):
         self.weight = weight
         self.alphabet: Mapping[str, int] = alphabet
         alpha_tensor = []
-        for character in self.alphabet.keys():
+        for character in self.alphabet:
             i = self.alphabet[character]
-            gold_character_vector = torch.zeros(len(self.alphabet) + 1)
+            gold_character_vector = torch.zeros(len(self.alphabet))
             gold_character_vector[i] = 1.0
             alpha_tensor.append(gold_character_vector)
-        oov = torch.zeros(len(self.alphabet) + 1)
+        oov = torch.zeros(len(self.alphabet))
         oov[0] = 1.0
         alpha_tensor.insert(0, oov)
         alpha_tensor = torch.stack(alpha_tensor)
@@ -400,12 +400,12 @@ class UnbindingLoss(torch.nn.modules.loss._Loss):
     def forward(self, input, target):
         distances = torch.einsum(
             "bcm,ac-> bam",
-            input.view(input.size(0), len(self.alphabet) + 1, -1),
+            input.view(input.size(0), len(self.alphabet), -1),
             self.alpha_tensor,
         )
         return cross_entropy(
             distances,
-            target.view(target.size(0), len(self.alphabet) + 1, -1).argmax(dim=1),
+            target.view(target.size(0), len(self.alphabet), -1).argmax(dim=1),
             weight=self.weight,
             ignore_index=self.ignore_index,
         )
