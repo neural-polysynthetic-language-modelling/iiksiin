@@ -536,7 +536,7 @@ def main():
         import pickle
 
         logging.info(f"Extracting tensor shape from {args.tensor_file}")
-        tensors = Tensors.load_from_pickle_file(args.tensor_file)
+        tensors = Tensors.load_from_pickle_file(args.tensor_file, args.alphabet)
         tensor_shape = tensors.shape()
 
         logging.info(f"Loading vectors from {args.vector_file}")
