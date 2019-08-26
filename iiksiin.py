@@ -428,6 +428,7 @@ def main(
     output_file: str,
     verbose: int,
     blacklist_char: str,
+    validate_tensors: bool
 ) -> None:
 
     import pickle
@@ -477,9 +478,16 @@ def main(
                             else:
                                 try:
                                     tensor: Tensor = tpr.process_morpheme(morpheme)
+                                    if validate_tensors:
+                                        reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=max_characters)
+                                        assert(reconstructed_surface_form == morpheme)
                                     result[morpheme] = tensor.data
-                                except IndexError:
-                                    logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}")
+                                except (IndexError, AssertionError) as e:
+                                    if isinstance(e, IndexError):
+                                        logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}")
+                                    elif isinstance(e, AssertionError):
+                                        logging.warning(f"Line {number} - unable to reconstruct morpheme {morpheme} (length {len(morpheme)}) of {word} from tensor representation")
+                                    
                                     skipped_morphemes.add(morpheme)
 
             logging.info(f"Writing binary file containing {len(result)} morphemes to disk at {output}...")
@@ -494,6 +502,15 @@ if __name__ == "__main__":
 
     arg_parser = argparse.ArgumentParser(
         description="Construct tensor product representations of each morpheme."
+    )
+    arg_parser.add_argument(
+        "-x",
+        "--validate_tensors"
+        metavar="BOOL",
+        type=bool,
+        nargs="?",
+        default=True,
+        help="Should the program attempt to reconstruct each morpheme from its tensor representation"
     )
     arg_parser.add_argument(
         "-c",
@@ -584,5 +601,6 @@ if __name__ == "__main__":
         input_file=args.input_file,
         output_file=args.output_file,
         verbose=args.verbose,
-        blacklist_char=args.blacklist_char
+        blacklist_char=args.blacklist_char,
+        validate_tensors=args.validate_tensors
     )
