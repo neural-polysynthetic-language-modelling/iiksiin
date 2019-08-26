@@ -505,7 +505,7 @@ if __name__ == "__main__":
     )
     arg_parser.add_argument(
         "-x",
-        "--validate_tensors"
+        "--validate_tensors",
         metavar="BOOL",
         type=bool,
         nargs="?",
