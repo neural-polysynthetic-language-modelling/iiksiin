@@ -522,6 +522,17 @@ if __name__ == "__main__":
         help="Python pickle file containing an Alphabet object"
     )
     arg_parser.add_argument(
+        "-e",
+        "--end_of_morpheme_symbol",
+        metavar="character",
+        type=str,
+        nargs="?",
+        default="\\u0000",
+        help="In this output tensor representation, "
+        + "this character will be appended as the final symbol in every morpheme. "
+        + "This symbol must not appear in the alphabet",
+    )
+    arg_parser.add_argument(
         "-d",
         "--morpheme_delimiter",
         metavar="string",
