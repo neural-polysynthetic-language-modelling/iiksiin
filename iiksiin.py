@@ -356,7 +356,7 @@ class TensorProductRepresentation:
 
     def process_morpheme(self, morpheme: Iterable[str]) -> Tensor:
         return TensorProductRepresentation.process_characters_in_morpheme(
-            characters=list(morpheme) + [alphabet.end_of_morpheme_symbol],
+            characters=list(morpheme) + [self.alphabet.end_of_morpheme_symbol],
             alphabet=self.alphabet,
             character_roles=self.character_roles
         )
