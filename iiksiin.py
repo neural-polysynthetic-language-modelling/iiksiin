@@ -478,9 +478,9 @@ def main(
                             else:
                                 try:
                                     tensor: Tensor = tpr.process_morpheme(morpheme)
-                                    if validate_tensors:
-                                        reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=tpr.alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=len(tpr.character_roles))
-                                        assert(reconstructed_surface_form == morpheme)
+#                                    if validate_tensors:
+#                                        reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=tpr.alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=len(tpr.character_roles))
+ #                                       assert(reconstructed_surface_form == morpheme)
                                     result[morpheme] = tensor.data
                                 except (IndexError, AssertionError) as e:
                                     if isinstance(e, IndexError):
