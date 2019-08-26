@@ -480,7 +480,7 @@ def main(
                                     tensor: Tensor = tpr.process_morpheme(morpheme)
                                     if validate_tensors:
                                         reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=max_characters)
-                                        print(f"{morpheme}\t{reconstructed_surface_form}")
+                                        logging.warning(f"{morpheme}\t{reconstructed_surface_form}")
                                         assert(reconstructed_surface_form == morpheme)
                                     result[morpheme] = tensor.data
                                 except (IndexError, AssertionError) as e:
