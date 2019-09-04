@@ -73,7 +73,7 @@ class Alphabet:
         return len(self._symbols)
 
     def __len__(self) -> int:
-        return 1 + len(self._symbols)
+        return 1 + len(self._symbols) # FIXME: Change to return len(self.dimension)
     
     def __iter__(self) -> Iterator[str]:
         return iter(self._symbols.keys())

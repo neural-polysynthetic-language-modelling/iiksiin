@@ -187,7 +187,7 @@ class Autoencoder(torch.nn.Module):
 
     def run_t2v(
         self, data, max_items_per_batch: int, cuda_device: int
-    ) -> Dict[str, torch.Tensor]:
+    ) -> Dict[str, List[float]]:
 
         self.eval()
 
@@ -488,7 +488,7 @@ def main():
 
         model: Autoencoder = torch.load(args.model_file)
 
-        results: Dict[str, torch.Tensor] = model.run_t2v(
+        results: Dict[str, torch.Tensor] = model.run_t2v(  # TODO: Fix type signature
             data, args.batch_size, args.cuda_device
         )
 
@@ -588,7 +588,7 @@ def main():
 
         model: Autoencoder = torch.load(args.model_file)
 
-        results: Dict[str, torch.Tensor] = model.run_t2v(
+        results: Dict[str, List[float]] = model.run_t2v(
             data, args.batch_size, args.cuda_device
         )
 
