@@ -104,9 +104,6 @@ class Attention(nn.Module):
         tmp_5: torch.Tensor = self.activation_function(tmp_4)
         assert tmp_5.shape == torch.Size([batch_size, max_seq_len, self.attention_hidden_size])
 
-        print(self.v.shape)
-        print(tmp_5.shape)
-
         energy: torch.Tensor = torch.matmul(tmp_5, self.v)
         assert energy.shape == torch.Size([batch_size, max_seq_len])
 
@@ -171,31 +168,23 @@ class DecoderWithAttention(nn.Module):
 
     def __init__(self, *,
                  attention: Attention,
-                 mode: str,
+                 nonlinearity: str,
                  output_size: int,
                  hidden_size: int,
-                 num_hidden_layers: int,
-                 use_bias: bool = True,
-                 dropout: float = 0.0):
+                 use_bias: bool = True):
         super().__init__()
 
         self.attention: Attention = attention
 
         self.output_layer_size = output_size
-        self.hidden_layer_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
         self.input_size = self.output_layer_size + attention.context_size
 
-        self.rnn = nn.RNNBase(mode=mode,
-                              input_size=self.input_size,
-                              hidden_size=self.hidden_layer_size,
-                              num_layers=num_hidden_layers,
+        self.rnn = nn.RNNCell(input_size=self.input_size,
+                              hidden_size=hidden_size,
                               bias=use_bias,
-                              batch_first=True,
-                              dropout=dropout,
-                              bidirectional=False)
+                              nonlinearity=nonlinearity)
 
-        self.output_layer = nn.Linear(self.hidden_layer_size, self.output_layer_size)
+        self.output_layer = nn.Linear(hidden_size, self.output_layer_size)
 
     def forward(self, *,
                 batch_size: int,
@@ -205,12 +194,12 @@ class DecoderWithAttention(nn.Module):
                 decoder_previous_hidden_state: torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor]:
 
         if not decoder_previous_hidden_state:
-            decoder_previous_hidden_state = torch.zeros(self.num_hidden_layers, batch_size, self.rnn.hidden_size)
-        assert decoder_previous_hidden_state.shape == torch.Size([self.num_hidden_layers, batch_size, self.rnn.hidden_size])
+            decoder_previous_hidden_state = torch.zeros(batch_size, self.rnn.hidden_size)
+        assert decoder_previous_hidden_state.shape == torch.Size([batch_size, self.rnn.hidden_size])
 
         assert decoder_previous_output.shape == torch.Size([batch_size, self.output_layer_size])
-        decoder_previous_output = decoder_previous_output.unsqueeze(dim=1)
-        assert decoder_previous_output.shape == torch.Size([batch_size, 1, self.output_layer_size])
+        # decoder_previous_output = decoder_previous_output.unsqueeze(dim=1)
+        # assert decoder_previous_output.shape == torch.Size([batch_size, 1, self.output_layer_size])
 
         context: torch.Tensor = self.attention.forward(batch_size=batch_size,
                                                        max_seq_len=encoder_max_seq_len,
@@ -218,27 +207,34 @@ class DecoderWithAttention(nn.Module):
                                                        encoder_final_hidden_layers=encoder_final_hidden_layers)
 
         assert context.shape == torch.Size([batch_size, self.attention.context_size])
-        context = context.unsqueeze(dim=1)
-        assert context.shape == torch.Size([batch_size, 1, self.attention.context_size])
+        # context = context.unsqueeze(dim=1)
+        # assert context.shape == torch.Size([batch_size, 1, self.attention.context_size])
 
-        decoder_input: torch.Tensor = torch.cat(tensors=(decoder_previous_output, context), dim=2)
-        assert decoder_input.shape == torch.Size([batch_size, 1, self.input_size])
+        decoder_input: torch.Tensor = torch.cat(tensors=(decoder_previous_output, context), dim=1)
 
-        assert decoder_previous_hidden_state.shape == torch.Size([self.num_hidden_layers,
-                                                                  batch_size,
-                                                                  self.rnn.hidden_size])
-        rnn_outputs: Tuple[torch.Tensor, torch.Tensor] = self.rnn(decoder_input, decoder_previous_hidden_state)
+        assert decoder_input.shape == torch.Size([batch_size, self.input_size])
+        assert decoder_previous_hidden_state.shape == torch.Size([batch_size, self.rnn.hidden_size])
 
-        rnn_final_hidden_layers: torch.Tensor = rnn_outputs[0]
-        assert rnn_final_hidden_layers.shape == torch.Size([batch_size, 1, self.rnn.hidden_size])
+        rnn_hidden_state: torch.Tensor = self.rnn(input=decoder_input, hx=decoder_previous_hidden_state)
+        assert rnn_hidden_state.shape == torch.Size([batch_size, self.rnn.hidden_size])
 
-        rnn_final_hidden_layers = torch.squeeze(rnn_final_hidden_layers, dim=1)
-        assert rnn_final_hidden_layers.shape == torch.Size([batch_size, self.rnn.hidden_size])
-
-        decoder_output: torch.Tensor = self.output_layer(rnn_final_hidden_layers)
+        decoder_output: torch.Tensor = self.output_layer(rnn_hidden_state)
         assert decoder_output.shape == torch.Size([batch_size, self.output_layer_size])
 
-        return decoder_output, rnn_final_hidden_layers
+        return decoder_output, rnn_hidden_state
+
+        # rnn_final_hidden_layers: torch.Tensor = rnn_outputs[0]
+        # print(f"rnn_final_hidden_layers.shape is {rnn_final_hidden_layers.shape}")
+        # print(f"torch.Size([batch_size, self.rnn.hidden_size]) is {torch.Size([batch_size, self.rnn.hidden_size])}")
+        # assert rnn_final_hidden_layers.shape == torch.Size([batch_size, self.rnn.hidden_size])
+        #
+        # rnn_final_hidden_layers = torch.squeeze(rnn_final_hidden_layers, dim=1)
+        # assert rnn_final_hidden_layers.shape == torch.Size([batch_size, self.rnn.hidden_size])
+        #
+        # decoder_output: torch.Tensor = self.output_layer(rnn_final_hidden_layers)
+        # assert decoder_output.shape == torch.Size([batch_size, self.output_layer_size])
+        #
+        # return decoder_output, rnn_final_hidden_layers
 
 
 class Seq2Seq(nn.Module):
@@ -282,7 +278,7 @@ class Seq2Seq(nn.Module):
                                                                      decoder_previous_output=decoder_previous_output)
 
             assert result[0].shape == torch.Size([batch_size, self.decoder.output_layer_size])
-            assert result[1].shape == torch.Size([batch_size, self.decoder.hidden_size])
+            assert result[1].shape == torch.Size([batch_size, self.decoder.rnn.hidden_size])
 
             decoder_output[t] = result[0]
             decoder_previous_output = result[1]
@@ -302,14 +298,13 @@ def seq2seq():
     attention: Attention = Attention(attention_hidden_size=64,
                                      encoder_hidden_size=encoder.hidden_size,
                                      decoder_hidden_size=150,
-                                     bidirectional_encoder=(encoder.num_directions==2),
+                                     bidirectional_encoder=(True if encoder.num_directions == 2 else False),
                                      attention_activation_function=nn.ReLU())
 
     decoder: DecoderWithAttention = DecoderWithAttention(attention=attention,
-                                                         mode="RNN_RELU",
+                                                         nonlinearity="relu",
                                                          output_size=80,
-                                                         hidden_size=attention.decoder_hidden_size,
-                                                         num_hidden_layers=4)
+                                                         hidden_size=attention.decoder_hidden_size)
 
     encoder_decoder: Seq2Seq = Seq2Seq(encoder=encoder, decoder=decoder)
 
@@ -317,7 +312,7 @@ def seq2seq():
     input_seq_len: int = 1
     input_tensor: torch.Tensor = torch.zeros(batch_size, input_seq_len, encoder.input_size)
     input_tensor[0][0][35] = 1
-    #input_tensor[0][1][27] = 1
+    # input_tensor[0][1][27] = 1
 
     start_of_output_sequence: torch.Tensor = torch.zeros(batch_size, decoder.output_layer_size)
 
@@ -331,7 +326,7 @@ def seq2seq():
                                            input_tensor=input_tensor,
                                            output_start_of_sequence_tensor=start_of_output_sequence)
 
-    print(result.shape)
+    print(result)
 
 
 if __name__ == "__main__":
