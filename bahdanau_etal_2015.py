@@ -1,7 +1,7 @@
 from typing import Tuple
 
-import torch
-import torch.nn as nn
+import torch           # type: ignore
+import torch.nn as nn  # type: ignore
 
 
 class Encoder(nn.Module):
