@@ -13,7 +13,7 @@ Upévare Saúl heʼi imoirũhára>pe : “ e>nohẽ nde kyse puku ha che juka , 
 ```
 Run:
 ```bash
-cat bible.txt |python3 iiksiin.py -d '>' -a alphabet.txt -o guarani.tensors
+./iiksiin.sh bible.txt guarani.tensors
 
 ```
 
