@@ -11,10 +11,31 @@ Input file:
 Upévare Saúl heʼi imoirũhára>pe : “ e>nohẽ nde kyse puku ha che juka , ani ou umi tekove ahẽ ha o>ñemboharái che rehe . 
 ” Iñirũ katu okyhyje ha nd>o>japosé>i . upémarõ Saúl o>hekýi ikyse puku ha o>jeity hiʼári . 
 ```
-Run:
+To build tensors with the default parameters, run:
 ```bash
 ./iiksiin.sh bible.txt guarani.tensors
 
+```
+
+To build alphabet, you could use `alphabet.py` script. It accepts the following mandatory arguments:
+* `-i` — input file containing whitespace delimited words (- for standard input).
+* `-o` — output file where pickled alphabet is dumped.
+* `--desciption` — description of the alphabet. Will serve as the name of the alphabet.
+* `--log` — log file.
+
+Example usage:
+```bash
+alphabet.py -i bible.txt -o alphabet --description "description" --log log
+```
+
+To build tensors, use `corpus2tensors.py` script. It accepts a corpus as the standard input the following mandatory arguments:
+* `-a` — Python pickle file containing an Alphabet object.
+* `-o` — output file where morpheme tensors are recorded.
+* `-d` — in the user-provided input file, this character must appear between adjacent morphemes. This symbol must not appear in the alphabet.
+
+Example usage:
+```bash
+cat bible.txt | python3 corpus2tensors.py -d '>' -a alphabet -o guarani.tensors
 ```
 
 
