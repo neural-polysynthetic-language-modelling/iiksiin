@@ -273,7 +273,10 @@ class Autoencoder(torch.nn.Module):
                 torch.save(
                     self, f"model_at_epoch_{str(epoch).zfill(len(str(num_epochs)))}.pt"
                 )
-                self.cuda(device=cuda_device)
+                if cuda_device < 0:
+                    self.cpu()
+                else:
+                    self.cuda(device=cuda_device)
 
             # Backward pass
             optimizer.step()
@@ -436,9 +439,10 @@ def main():
             hidden_layer_size=args.hidden_layer_size,
             num_hidden_layers=args.hidden_layers,
         )
-
+        
+        device = "cpu" if args.cuda_device == -1 else f"cuda:{args.cuda_device}"
         criterion: torch.nn.Module = UnbindingLoss(alphabet=data.alphabet).to(
-            f"cuda:{args.cuda_device}"
+            device
         )
         optimizer: torch.optim.Optimizer = torch.optim.Adam(
             model.parameters(), lr=args.learning_rate
