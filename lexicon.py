@@ -502,8 +502,38 @@ class MorphologicalAnalyzer:
             underlying_analyses = list(self.s2u.apply_up(token))
             if not underlying_analyses:
                 underlying_analyses = list(self.s2u.apply_up(token.lower()))
-            intermediate_analyses = [list(self.i2u.apply_down(underlying_analysis))[0] for underlying_analysis in
-                                     underlying_analyses]
+
+            # For each underlying analysis, obtain the corresponding list of intermediate analyses.
+            # Nearly always, this list will consist of exactly one item.
+            # It is theoretically possible, but unlikely in practice, that this list could contain more than one item.
+            # In theory, this list should never contain less than one item, but if a bug exists in the analyzer,
+            #   such an eventuality could happen. Special care should be taken to prevent a crash in this eventuality.
+            resulting_underlying_analyses = list()
+            resulting_intermediate_analyses = list()
+            for underlying_analysis in underlying_analyses:
+                intermediate_results = list(self.i2u.apply_down(underlying_analysis))
+                if len(intermediate_results) == 0:
+                    print(f"WARNING: apply_down({underlying_analysis}) resulted in failure for i2u FST",
+                          file=sys.stderr)
+                elif len(intermediate_results) > 1:
+                    print(f"WARNING: apply_down({underlying_analysis}) resulted in more than one analysis for i2u FST",
+                          file=sys.stderr)
+                else:
+                    resulting_underlying_analyses.append(underlying_analysis)
+                    resulting_intermediate_analyses.append(intermediate_results[0])
+
+            # intermediate_analyses = [list(self.i2u.apply_down(underlying_analysis))[0] for underlying_analysis in
+            #                         underlying_analyses]
+
+            intermediate_analyses = resulting_intermediate_analyses
+            underlying_analyses = resulting_underlying_analyses
+
+            # print(len(underlying_analyses))
+            # for u in underlying_analyses:
+            #     print(u)
+            # for i in intermediate_analyses:
+            #     print(i)
+
             options = sorted(
                 [underlying_analyses[i] + "\u241E" + intermediate_analyses[i] for i in range(len(underlying_analyses))],
                 key=MorphologicalAnalyzer.heuristic)
@@ -511,6 +541,8 @@ class MorphologicalAnalyzer:
                 self.cache[token] = options[0] + "\u241E" + token
             else:
                 self.cache[token] = "*" + token
+
+            print(self.cache[token])
 
         return self.cache[token]
 
