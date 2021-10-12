@@ -513,11 +513,10 @@ class MorphologicalAnalyzer:
             for underlying_analysis in underlying_analyses:
                 intermediate_results = list(self.i2u.apply_down(underlying_analysis))
                 if len(intermediate_results) == 0:
-                    print(f"WARNING: apply_down({underlying_analysis}) resulted in failure for i2u FST",
-                          file=sys.stderr)
+                    logging.warn(f"WARNING: apply_down({underlying_analysis}) resulted in failure for i2u FST")
                 elif len(intermediate_results) > 1:
-                    print(f"WARNING: apply_down({underlying_analysis}) resulted in more than one analysis for i2u FST",
-                          file=sys.stderr)
+                    logging.warn(f"WARNING: apply_down({underlying_analysis}) resulted in" +
+                                 "more than one analysis for i2u FST")
                 else:
                     resulting_underlying_analyses.append(underlying_analysis)
                     resulting_intermediate_analyses.append(intermediate_results[0])
@@ -541,8 +540,6 @@ class MorphologicalAnalyzer:
                 self.cache[token] = options[0] + "\u241E" + token
             else:
                 self.cache[token] = "*" + token
-
-            print(self.cache[token])
 
         return self.cache[token]
 
