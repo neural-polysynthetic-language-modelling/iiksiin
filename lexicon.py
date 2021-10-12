@@ -474,6 +474,9 @@ class Lexicon:
 
 class MorphologicalAnalyzer:
 
+    morpheme_delimiter = "^"
+    null_morpheme = "{0}"
+
     def __init__(self, s2u_filename: str, i2u_filename: str):
         self.s2u = FST.load(s2u_filename)
         self.i2u = FST.load(i2u_filename)
@@ -483,11 +486,11 @@ class MorphologicalAnalyzer:
     def heuristic(analysis: str) -> int:
         result = 0
         parts = analysis.split("\u241E")
-        segments_in_lhs = parts[0].count("^") + 1
-        segments_in_rhs = parts[1].count("^") + 1
+        segments_in_lhs = parts[0].count(MorphologicalAnalyzer.morpheme_delimiter) + 1
+        segments_in_rhs = parts[1].count(MorphologicalAnalyzer.morpheme_delimiter) + 1
         result += (segments_in_lhs - segments_in_rhs) * 1000
 
-        lhs_elements = set(parts[0].split("^"))
+        lhs_elements = set(parts[0].split(MorphologicalAnalyzer.morpheme_delimiter))
         duplicates = segments_in_lhs - len(lhs_elements)
         result += duplicates * 10000
 
@@ -496,6 +499,21 @@ class MorphologicalAnalyzer:
         result += segments_in_rhs
 
         return result
+
+    @staticmethod
+    def match_ignoring_case_and_vowel_length(surface_form: str, intermediate_analysis: str) -> bool:
+        a = MorphologicalAnalyzer.normalize_vowel_length(surface_form.lower())
+        b = MorphologicalAnalyzer.normalize_vowel_length(MorphologicalAnalyzer.remove_delimiters(intermediate_analysis.lower()))
+        return a == b
+
+    @staticmethod
+    def normalize_vowel_length(string: str) -> str:
+        return string.replace('aa', 'a').replace('ii', 'i').replace('uu', 'u')
+
+    @staticmethod
+    def remove_delimiters(string: str) -> str:
+        return string.replace(MorphologicalAnalyzer.morpheme_delimiter, '').\
+            replace(MorphologicalAnalyzer.null_morpheme, '')
 
     def best_analysis(self, token: str) -> str:
         if token not in self.cache:
@@ -513,10 +531,26 @@ class MorphologicalAnalyzer:
             for underlying_analysis in underlying_analyses:
                 intermediate_results = list(self.i2u.apply_down(underlying_analysis))
                 if len(intermediate_results) == 0:
-                    logging.warn(f"WARNING: apply_down({underlying_analysis}) resulted in failure for i2u FST")
+                    logging.warning(f"WARNING: apply_down({underlying_analysis}) " +
+                                    f"for token {token} resulted in failure for i2u FST")
                 elif len(intermediate_results) > 1:
-                    logging.warn(f"WARNING: apply_down({underlying_analysis}) resulted in" +
-                                 "more than one analysis for i2u FST")
+                    acceptable_intermediate_results = list(filter(lambda intermediate_result:
+                                                                  MorphologicalAnalyzer.match_ignoring_case_and_vowel_length(token, intermediate_result),
+                                                                  intermediate_results))
+                    if len(acceptable_intermediate_results) < 1:
+                        message = f"WARNING: apply_down({underlying_analysis}) resulted in " + \
+                                  f"no analysis for i2u FST that matches surface form {token}: "
+
+                        for r in intermediate_results:
+                            message += MorphologicalAnalyzer.remove_delimiters(r)
+                        logging.warning(message)
+                        continue
+                    elif len(acceptable_intermediate_results) > 1:
+                        logging.warning(f"WARNING: apply_down({underlying_analysis}) resulted in " +
+                                        f"more than one analysis for i2u FST for surface form {token}")
+
+                    resulting_underlying_analyses.append(underlying_analysis)
+                    resulting_intermediate_analyses.append(acceptable_intermediate_results[0])
                 else:
                     resulting_underlying_analyses.append(underlying_analysis)
                     resulting_intermediate_analyses.append(intermediate_results[0])
