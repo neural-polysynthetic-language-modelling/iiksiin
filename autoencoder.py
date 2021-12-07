@@ -72,6 +72,8 @@ class Tensors:
             -1
         ).shape[0]
 
+        self.max_morphs: int = next(iter(self.tensor_dict.values())).shape[-1]
+
     def shape(self):
         #        print(type(self.tensor_dict))
         #        print(type(self.tensor_dict.values()))
@@ -209,7 +211,7 @@ class Autoencoder(torch.nn.Module):
 
             morphemes: List[str] = batch_info[batch_number]
             number_of_results: int = batch_of_results.shape[0]
-            for n in range(min(number_of_results, len(morphemes))):  # type: int
+            for n in range(min(number_of_results, len(morphemes))):  # type: in
                 morpheme: str = morphemes[n]
                 tensor: torch.Tensor = batch_of_results[n]
                 # print(tensor)
@@ -220,7 +222,6 @@ class Autoencoder(torch.nn.Module):
                 # print(results[morpheme])
                 # print(results[morpheme].shape)
                 # sys.exit(0)
-
         return results
 
     def run_training(
@@ -377,6 +378,7 @@ class UnbindingLoss(torch.nn.modules.loss._Loss):
     def __init__(
         self,
         alphabet: Alphabet,
+        max_morphs: 10,
         weight=None,
         size_average=None,
         ignore_index=-100,
@@ -398,20 +400,33 @@ class UnbindingLoss(torch.nn.modules.loss._Loss):
         oov[0] = 1.0
         alpha_tensor.insert(0, oov)
         alpha_tensor = torch.stack(alpha_tensor)
+        self.max_morphs=max_morphs
         self.register_buffer("alpha_tensor", alpha_tensor)
 
     def forward(self, input, target):
-        distances = torch.einsum(
-            "bcm,ac-> bam",
-            input.view(input.size(0), len(self.alphabet), -1),
-            self.alpha_tensor,
-        )
-        return cross_entropy(
-            distances,
-            target.view(target.size(0), len(self.alphabet), -1).argmax(dim=1),
-            weight=self.weight,
-            ignore_index=self.ignore_index,
-        )
+        result = None
+        for i in range(self.max_morphs):
+            gold_morph_vector = torch.zeros(self.max_morphs).cuda("cuda:1")
+            gold_morph_vector[i] = 1.0
+            morph_tens = torch.einsum('bcmw, w -> bcm', input.view(input.size(0), len(self.alphabet), -1, self.max_morphs), gold_morph_vector)
+            distances = torch.einsum(
+                "bcm,ac-> bam",
+                morph_tens,
+                self.alpha_tensor,
+            )
+
+            ce = cross_entropy(
+                distances,
+                target.view(target.size(0), len(self.alphabet), -1, self.max_morphs)[:,:,:,i].argmax(dim=1),
+                weight=self.weight,
+                ignore_index=self.ignore_index,
+            )
+
+            if result is not None:
+                result += ce
+            else:
+                result = ce
+        return result
 
 
 def main():
@@ -439,9 +454,9 @@ def main():
             hidden_layer_size=args.hidden_layer_size,
             num_hidden_layers=args.hidden_layers,
         )
-        
+
         device = "cpu" if args.cuda_device == -1 else f"cuda:{args.cuda_device}"
-        criterion: torch.nn.Module = UnbindingLoss(alphabet=data.alphabet).to(
+        criterion: torch.nn.Module = UnbindingLoss(alphabet=data.alphabet,  max_morphs=data.max_morphs).to(
             device
         )
         optimizer: torch.optim.Optimizer = torch.optim.Adam(
@@ -572,7 +587,7 @@ def main():
                     ).reshape(tensor_shape).cuda(device=args.cuda_device)
 
                 actual: str = TensorProductRepresentation.extract_surface_form(
-                    alphabet=tensors.alphabet, morpheme_tensor=tensor
+                    alphabet=tensors.alphabet, word_tensor=tensor
                 )
                 print(f"{expected==actual}\t{expected}\t{actual}", file=output_file)
                 output_file.flush()

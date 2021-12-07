@@ -54,7 +54,7 @@ def main(
             + "(see Unicode Standard Annex #29)."
         )
 
-    
+
     with open(alphabet_file, "rb") as f:
         alphabet: Alphabet = pickle.load(f)
 
@@ -67,7 +67,8 @@ def main(
 
             tpr: TensorProductRepresentation = TensorProductRepresentation(
                 alphabet=alphabet,
-                characters_dimension=characters_dimension
+                characters_dimension=characters_dimension,
+                morphemes_dimension=morphemes_dimension
             )
 
             result: Dict[str, torch.Tensor] = {}
@@ -83,27 +84,38 @@ def main(
                                 logging.warning(f"WARNING - not in alphabet:\t{Alphabet.unicode_info(character)}")
 
                         morphemes = word.split(morpheme_delimiter)
-                        for morpheme in morphemes:
-                            if len(morpheme) == 0:
-                                logging.debug(f"Line {number} - skipping morpheme of length 0 in word {word}")
-                            elif len(morpheme) == max_characters:
-                                logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} equals max length {max_characters}, and there is no space to insert the required end of morpheme symbol")
-                            elif len(morpheme) > max_characters:
-                                logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} exceeds max length {max_characters}")
-                            else:
-                                try:
-                                    tensor: Tensor = tpr.process_morpheme(morpheme)
-#                                    if validate_tensors:
-#                                        reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=tpr.alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=len(tpr.character_roles))
- #                                       assert(reconstructed_surface_form == morpheme)
-                                    result[morpheme] = tensor.data
-                                except IndexError:
-                                    logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}")
-#                                    elif isinstance(e, AssertionError):
-#                                        logging.warning(f"Line {number} - unable to reconstruct morpheme {morpheme} (length {len(morpheme)}) of {word} from tensor representation")
-                                    
-                                    skipped_morphemes.add(morpheme)
-#                                    raise e
+                        try:
+                            tensor = tpr.process_word(morphemes)
+                            result[word] = tensor.data
+                        except TPRError:
+                            logging.warning('skipped smth lmao')
+                            skipped_morphemes.add(morphemes)
+                        if True:
+                            reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=tpr.alphabet, word_tensor=tensor.data)
+
+                            gen_morphemes = [x.strip('\x04') for x in reconstructed_surface_form.split(morpheme_delimiter)]
+                            assert(gen_morphemes == morphemes)
+                        # for morpheme in morphemes:
+                        #     if len(morpheme) == 0:
+                        #         logging.debug(f"Line {number} - skipping morpheme of length 0 in word {word}")
+                        #     elif len(morpheme) == max_characters:
+                        #         logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} equals max length {max_characters}, and there is no space to insert the required end of morpheme symbol")
+                        #     elif len(morpheme) > max_characters:
+                        #         logging.warning(f"Line {number} - skipping morpheme {morpheme} of {word} because its length {len(morpheme)} exceeds max length {max_characters}")
+                        #     else:
+                        #         try:
+                        #             tensor: Tensor = tpr.process_morpheme(morpheme)
+# #                                    if validate_tensors:
+# #                                        reconstructed_surface_form = TensorProductRepresentation.extract_surface_form(alphabet=tpr.alphabet, morpheme_tensor=tensor.data, max_chars_per_morpheme=len(tpr.character_roles))
+ # #                                       assert(reconstructed_surface_form == morpheme)
+                        #             result[morpheme] = tensor.data
+                        #         except IndexError:
+                        #             logging.warning(f"Line {number} - unable to process morpheme {morpheme} (length {len(morpheme)}) of {word}")
+# #                                    elif isinstance(e, AssertionError):
+# #                                        logging.warning(f"Line {number} - unable to reconstruct morpheme {morpheme} (length {len(morpheme)}) of {word} from tensor representation")
+
+                        #             skipped_morphemes.add(morpheme)
+# #                                    raise e
 
             logging.info(f"Writing binary file containing {len(result)} morphemes to disk at {output}...")
             pickle.dump(result, output)

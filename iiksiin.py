@@ -31,9 +31,14 @@ __status__ = "Prototype"
 if sys.version_info < (3, 7):
     raise RuntimeError(f"{__file__} requires Python 3.7 or later")
 
+class TPRError(Exception):
+    pass
+
+
 class Alphabet:
 
-    def __init__(self, name: str, symbols: Set[str], end_of_morpheme_symbol: str = "\u0000", padding_symbol: str = "\u0004"):
+    def __init__(self, name: str, symbols: Set[str], end_of_morpheme_symbol: str = "\u0000", padding_symbol: str = "\u0004", morpheme_delimiter= "^"):
+        self.morpheme_delimiter = morpheme_delimiter
         constructor_errors: List[str] = list()
         if end_of_morpheme_symbol in symbols:
             constructor_errors.append(f"The end-of-morpheme symbol ({Alphabet.unicode_info(end_of_morpheme_symbol)}) must not be in the provided set of symbols")
@@ -48,16 +53,16 @@ class Alphabet:
 
         # The value self.oov (in the context of self._symbols) is reserved for all out-of-alphabet symbols
         self.oov = 0
-        
+
         self.end_of_morpheme_symbol = end_of_morpheme_symbol
         self._symbols[self.end_of_morpheme_symbol] = 1
-        
+
         self.padding_symbol = padding_symbol
         self._symbols[self.padding_symbol] = 2
 
         for (index, symbol) in enumerate(sorted(symbols), start=3):
             self._symbols[symbol] = index
-        
+
         self.dimension: Dimension = Dimension(name, 1 + len(self._symbols))
         self.name = name
 
@@ -74,7 +79,7 @@ class Alphabet:
 
     def __len__(self) -> int:
         return 1 + len(self._symbols) # FIXME: Change to return len(self.dimension)
-    
+
     def __iter__(self) -> Iterator[str]:
         return iter(self._symbols.keys())
 
@@ -89,7 +94,7 @@ class Alphabet:
             return True
         else:
             return False
-        
+
     def __str__(self) -> str:
         return self.name
 
@@ -146,6 +151,7 @@ class Alphabet:
         return Alphabet(name=name,
                         symbols=alphabet_set,
                         end_of_morpheme_symbol=end_of_morpheme_symbol,
+                        morpheme_delimiter=morpheme_delimiter,
                         padding_symbol=padding_symbol)
 
 
@@ -277,7 +283,7 @@ class Roles:
 
     def __len__(self) -> int:
         return len(self._one_hot_role_vectors)
-    
+
     @staticmethod
     def get_one_hot_role_vectors(dimension: Dimension) -> List[Vector]:
         return [OneHotVector(index, dimension) for index in range(len(dimension))]
@@ -287,75 +293,127 @@ class TensorProductRepresentation:
     def __init__(
         self,
         alphabet: Alphabet,
-        characters_dimension: Dimension
-#        morphemes_dimension: Dimension,
+        characters_dimension: Dimension,
+        morphemes_dimension: Dimension
     ):
         self.alphabet: Alphabet = alphabet
         self.character_roles: Roles = Roles(
             characters_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
         )
-#        self.morpheme_roles: Roles = Roles(
-#            morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
-#        )
+        self.morpheme_roles: Roles = Roles(
+            morphemes_dimension, get_role_vectors=Roles.get_one_hot_role_vectors
+        )
 
     @staticmethod
     def extract_surface_form(alphabet: Alphabet,
-                             morpheme_tensor: torch.Tensor,
-                             max_chars_per_morpheme: int = 20) -> str:
+                             word_tensor: torch.Tensor,
+                             max_chars_per_morpheme: int = 23,
+                             max_num_of_morpheme=10) -> str:
 
         import math
 
-        result: List[str] = list()
+        end_of_word = False
+        word = []
+        for morpheme_position in range(max_num_of_morpheme):
+            if end_of_word:
+                break
+            morpheme_position_role = torch.zeros(max_num_of_morpheme)#.to('cuda:1')
+            morpheme_position_role[morpheme_position] = 1.0
 
-        for character_position in range(max_chars_per_morpheme):  # type: int
-            character_position_role = torch.zeros(max_chars_per_morpheme).cpu()
-            character_position_role[character_position] = 1.0
-        # for character_position in character_roles:  # Type: Vector
-
-            equation_in_einstein_notation: str = "...j,j->..."  #
+            equation_in_einstein_notation: str = "cmw,w->cm"  #
             """This means that the final dimension of data and the only dimension of role are the same size.
                We will be summing over that dimension."""
+
+            # morpheme_tensor = torch.einsum('cmw,w->cm', [word_tensor.cpu(), morpheme_position_role.cpu()])
+            morpheme_tensor = word_tensor.cpu() @ morpheme_position_role
+
+
+            result: List[str] = list()
+            for character_position in range(max_chars_per_morpheme):  # type: int
+                character_position_role = torch.zeros(max_chars_per_morpheme)#.to('cuda:1')
+                character_position_role[character_position] = 1.0
+            # for character_position in character_roles:  # Type: Vector
+
+                equation_in_einstein_notation: str = "...j,j->..."  #
+                """This means that the final dimension of data and the only dimension of role are the same size.
+                   We will be summing over that dimension."""
 
 #            print(f"morpheme_tensor.shape is {morpheme_tensor.shape}")
 #            print(f"character_position_role.shape is {character_position_role.shape}")
 
-            vector_for_current_character: torch.Tensor = torch.einsum(
-                equation_in_einstein_notation, [morpheme_tensor.cpu(), character_position_role.cpu()]
-            )
+                vector_for_current_character: torch.Tensor = morpheme_tensor.cpu() @ character_position_role
+                # vector_for_current_character: torch.Tensor = torch.einsum(
+                #     equation_in_einstein_notation, morpheme_tensor.cpu(), character_position_role.cpu()
+                # )
 #            print(f"vector_for_current_character.shape is {vector_for_current_character.shape}")
 #            print(f"vector for position {character_position}:\t{vector_for_current_character}")
-            best_character = None
-            best_distance = float("inf")
+                best_character = None
+                best_distance = float("inf")
 
-            for character in alphabet:
-                i: int = alphabet[character]
-                gold_character_vector = torch.zeros(vector_for_current_character.nelement()).cpu()
-                gold_character_vector[i] = 1.0
-                #print(f"gold_character_vector.shape is {gold_character_vector.shape}")
-                # print(gold_character_vector.shape)
-                # print(vector_for_current_character.shape)
-                # character_vector: Vector = alphabet.get_vector(character)
-                #distance = gold_character_vector.dot(vector_for_current_character).item()
-                summation: float = 0.0
-                for x in range(vector_for_current_character.nelement()):
-                    summation += (gold_character_vector[x] - vector_for_current_character[x])**2
-                distance = math.sqrt(summation)
+                for idx, character in enumerate(alphabet):
+                    i: int = alphabet[character]
+                    gold_character_vector = torch.zeros(vector_for_current_character.nelement()).cpu()
+                    gold_character_vector[i] = 1.0
+                    #print(f"gold_character_vector.shape is {gold_character_vector.shape}")
+                    # print(gold_character_vector.shape)
+                    # print(vector_for_current_character.shape)
+                    # character_vector: Vector = alphabet.get_vector(character)
+                    #distance = gold_character_vector.dot(vector_for_current_character).item()
+                    summation: float = 0.0
+                    for x in range(vector_for_current_character.nelement()):
+                        summation += (gold_character_vector[x] - vector_for_current_character[x])**2
+                    distance = math.sqrt(summation)
 
-                if distance < best_distance:
-                    best_character = character
-                    best_distance = distance
-                  #  print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
+                    if distance < best_distance:
+                        best_character = character
+                        best_distance = distance
+                      #  print(f"best_character is now {Alphabet.unicode_info(best_character)} with distance {best_distance}")
 
-            if best_character == alphabet.end_of_morpheme_symbol:
+                if best_character == alphabet.end_of_morpheme_symbol:
 #                result.append("\u2400")
-                break
+                    if character_position==0:
+                        end_of_word=True
+                    break
 #            elif best_character == Alphabet.END_OF_TRANSMISSION:
 #                result.append("\u2404")
-            else:
-                result.append(best_character)
-            #print(f"best character at position {character_position} is {Alphabet.unicode_info(best_character)}", file=sys.stderr)
+                else:
+                    result.append(best_character)
+                #print(f"best character at position {character_position} is {Alphabet.unicode_info(best_character)}", file=sys.stderr)
+            word.append("".join(result))
 
-        return "".join(result)
+        return alphabet.morpheme_delimiter.join(word)
+
+    def process_word(self, word):
+
+        result: Tensor = Tensor.zeros(
+            shape=Shape(self.alphabet.dimension, self.character_roles.dimension, self.morpheme_roles.dimension)
+        )
+
+        # Process characters in the actual morpheme
+        word.append("")
+        if len(word) > len(self.morpheme_roles.dimension):
+            raise TPRError()
+        for mindex, morpheme in enumerate(word):
+            characters = list(morpheme)
+            if len(morpheme) >= len(self.character_roles.dimension):
+                raise TPRError()
+            morph_result: Tensor = Tensor.zeros(
+                shape=Shape(self.alphabet.dimension, self.character_roles.dimension)
+            )
+            morph_role_vect = self.morpheme_roles[mindex]
+            for index, char in enumerate(characters):
+                char_vector: Vector = self.alphabet.get_vector(char)  # OneHotVector(alphabet[char], alphabet.dimension)
+                role_vector: Vector = self.character_roles[index]
+                morph_result += char_vector.tensor_product(role_vector)
+
+            # Treat anything after the morpheme as being filled by alphabet.padding_symbol
+            char_vector = self.alphabet.get_vector(self.alphabet.padding_symbol)
+            for index in range(index+1, len(self.character_roles)):
+                role_vector: Vector = self.character_roles[index]
+                morph_result += char_vector.tensor_product(role_vector)
+            result += morph_result.tensor_product(morph_role_vect)
+
+        return result
 
     def process_morpheme(self, morpheme: Iterable[str]) -> Tensor:
         return TensorProductRepresentation.process_characters_in_morpheme(
