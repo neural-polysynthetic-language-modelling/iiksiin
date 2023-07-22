@@ -1,3 +1,3 @@
 grapheme
 numpy
-torch==1.4
+torch==1.13.1
